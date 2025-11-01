@@ -10,7 +10,7 @@ st.title("Average Race Pace by Car")
 uploaded_file = st.file_uploader("Upload your race CSV file", type=["csv"])
 
 if uploaded_file:
-    # --- Auto-detect delimiter and clean headers ---
+    # Auto-detect delimiter and clean headers
     sample = uploaded_file.read().decode('utf-8-sig')
     uploaded_file.seek(0)
     dialect = csv.Sniffer().sniff(sample, delimiters=",;")
@@ -19,13 +19,11 @@ if uploaded_file:
     df = pd.read_csv(uploaded_file, sep=delimiter, encoding='utf-8-sig')
     df.columns = df.columns.str.strip().str.replace('\ufeff', '').str.upper()
 
-    # --- Required columns ---
     required_cols = {"NUMBER", "LAP_TIME", "TEAM", "CLASS"}
     if not required_cols.issubset(df.columns):
         st.error(f"❌ CSV must include {required_cols}. Found columns: {list(df.columns)}")
         st.stop()
 
-    # --- Convert LAP_TIME to seconds ---
     def lap_to_seconds(x):
         try:
             mins, secs = x.split(":")
@@ -36,21 +34,18 @@ if uploaded_file:
     df["LAP_TIME_SECONDS"] = df["LAP_TIME"].apply(lap_to_seconds)
     df = df.dropna(subset=["LAP_TIME_SECONDS"])
 
-    # --- Class filter ---
     available_classes = df["CLASS"].dropna().unique().tolist()
     selected_classes = st.multiselect(
         "Select classes to include:", available_classes, default=available_classes
     )
     df = df[df["CLASS"].isin(selected_classes)]
 
-    # --- Average lap time per car ---
     avg_df = (
         df.groupby(["NUMBER", "TEAM", "CLASS"], as_index=False)["LAP_TIME_SECONDS"]
         .mean()
-        .sort_values("LAP_TIME_SECONDS", ascending=True)  # fastest first
+        .sort_values("LAP_TIME_SECONDS", ascending=True)
     )
 
-    # --- Team color map ---
     team_colors = {
         'Cadillac Hertz Team JOTA': '#d4af37',
         'Peugeot TotalEnergies': '#BBD64D',
@@ -81,36 +76,35 @@ if uploaded_file:
 
     avg_df["color"] = avg_df["TEAM"].apply(get_team_color)
 
-    # --- Plot ---
+    # Combine number and team for y-axis label
+    avg_df["Label"] = avg_df["NUMBER"].astype(str) + " — " + avg_df["TEAM"]
+
     fig = px.bar(
         avg_df,
-        y="NUMBER",
+        y="Label",
         x="LAP_TIME_SECONDS",
         color="TEAM",
         orientation="h",
-        text="TEAM",
+        # Remove text on bars since labels are on y-axis now
         color_discrete_map={team: col for team, col in zip(avg_df["TEAM"], avg_df["color"])},
     )
 
-    # --- Y-axis categorical and sorted by fastest first ---
     fig.update_yaxes(
         type='category',
         categoryorder='array',
-        categoryarray=avg_df['NUMBER']
+        categoryarray=avg_df["Label"]
     )
 
-    # --- Dynamic X-axis range ---
     x_min = avg_df["LAP_TIME_SECONDS"].min() - 0.5
     x_max = avg_df["LAP_TIME_SECONDS"].max() + 0.5
     fig.update_xaxes(range=[x_min, x_max])
 
-    # --- Layout ---
     fig.update_layout(
         plot_bgcolor="#2b2b2b",
         paper_bgcolor="#2b2b2b",
         font=dict(color="white", size=14),
         xaxis_title="Average Lap Time (s)",
-        yaxis_title="Car Number",
+        yaxis_title="Car Number — Team",
         title="Average Race Pace by Car",
         title_font=dict(size=22),
         showlegend=True,

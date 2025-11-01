@@ -24,6 +24,14 @@ if uploaded_file:
         st.error(f"❌ CSV must include {required_cols}. Found columns: {list(df.columns)}")
         st.stop()
 
+    # Ensure NUMBER is string
+    df["NUMBER"] = df["NUMBER"].astype(str)
+
+    # Fix Aston Martin Thor Team cars 7 and 9 to '007' and '009'
+    mask_am = (df["TEAM"].str.lower() == "aston martin thor team") & (df["NUMBER"].isin(["7", "9"]))
+    df.loc[mask_am & (df["NUMBER"] == "7"), "NUMBER"] = "007"
+    df.loc[mask_am & (df["NUMBER"] == "9"), "NUMBER"] = "009"
+
     def lap_to_seconds(x):
         try:
             mins, secs = x.split(":")

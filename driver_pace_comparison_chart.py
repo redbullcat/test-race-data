@@ -94,6 +94,6 @@ def show_driver_pace_comparison(df, team_colors):
         legend_title="Percentile Range",
     )
 
-    fig.update_yaxes(autorange="min", range=y_range)
+    fig.update_yaxes(autorange="max", range=y_range)
 
     st.plotly_chart(fig, use_container_width=True)

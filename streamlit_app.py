@@ -17,10 +17,8 @@ if uploaded_file:
     except Exception:
         df = pd.read_csv(uploaded_file, sep="\t", encoding="utf-8-sig")
 
-    # Clean header names
     df.columns = [c.strip() for c in df.columns]
 
-    # Check required columns
     required_cols = {"NUMBER", "LAP_TIME"}
     if not required_cols.issubset(df.columns):
         st.error(f"❌ CSV must include {required_cols}. Found columns: {list(df.columns)}")
@@ -50,7 +48,7 @@ if uploaded_file:
         st.warning("No valid laps found in CSV after filtering.")
         st.stop()
 
-    # --- Class filter ---
+    # --- CLASS filter ---
     if "CLASS" in df.columns:
         available_classes = sorted(df["CLASS"].dropna().unique())
         selected_classes = st.multiselect(
@@ -63,7 +61,7 @@ if uploaded_file:
             st.warning("No data available for the selected classes.")
             st.stop()
 
-    # --- Compute averages ---
+    # --- Compute average lap time per car ---
     group_cols = ["NUMBER"]
     if "TEAM" in df.columns:
         group_cols.append("TEAM")
@@ -78,16 +76,21 @@ if uploaded_file:
 
     avg_times["Average Lap (min)"] = avg_times["LAP_TIME_SECONDS"].apply(lambda x: f"{x/60:.2f}")
 
-    # --- Horizontal plot ---
+    # --- Combine label for display ---
+    avg_times["Label"] = avg_times["NUMBER"].astype(str)
+    if "TEAM" in avg_times.columns:
+        avg_times["Label"] = avg_times["NUMBER"].astype(str) + " — " + avg_times["TEAM"]
+
+    # --- Horizontal bar chart (one per car) ---
     fig = px.bar(
         avg_times,
-        y="NUMBER",
+        y="Label",
         x="LAP_TIME_SECONDS",
-        color="CLASS" if "CLASS" in avg_times.columns else "TEAM",
+        color="CLASS" if "CLASS" in avg_times.columns else None,
         text="Average Lap (min)",
         orientation="h",
         title="Average Lap Time per Car",
-        labels={"NUMBER": "Car Number", "LAP_TIME_SECONDS": "Average Lap Time (s)"},
+        labels={"Label": "Car", "LAP_TIME_SECONDS": "Average Lap Time (s)"},
     )
 
     fig.update_layout(
@@ -97,7 +100,8 @@ if uploaded_file:
         yaxis=dict(autorange="reversed"),
         xaxis=dict(showgrid=True, gridcolor="gray"),
         title_x=0.5,
-        height=700
+        height=700,
+        legend_title_text="Class",
     )
 
     fig.update_traces(textposition="outside")

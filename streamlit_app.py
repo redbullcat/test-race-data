@@ -11,11 +11,11 @@ st.write("Upload your race CSV to visualize the average pace per car.")
 uploaded_file = st.file_uploader("Upload race CSV file", type=["csv"])
 
 if uploaded_file:
-    # Read CSV (auto-detect separator)
+    # Read CSV and handle UTF-8 BOM automatically
     try:
-        df = pd.read_csv(uploaded_file, sep=None, engine="python")
+        df = pd.read_csv(uploaded_file, sep=None, engine="python", encoding="utf-8-sig")
     except Exception:
-        df = pd.read_csv(uploaded_file, sep="\t")  # fallback for TSV
+        df = pd.read_csv(uploaded_file, sep="\t", encoding="utf-8-sig")
 
     # Clean column names
     df.columns = [c.strip() for c in df.columns]
@@ -28,7 +28,7 @@ if uploaded_file:
         )
         st.stop()
 
-    # --- Convert lap time to seconds ---
+    # --- Convert LAP_TIME to seconds ---
     def to_seconds(lap_time):
         try:
             m, s = str(lap_time).split(":")
@@ -38,13 +38,12 @@ if uploaded_file:
 
     df["LAP_TIME_SECONDS"] = df["LAP_TIME"].apply(to_seconds)
 
-    # --- Filter invalid laps ---
+    # --- Filter valid laps ---
     if "CROSSING_FINISH_LINE_IN_PIT" in df.columns:
         df = df[df["CROSSING_FINISH_LINE_IN_PIT"] == False]
-
     df = df[df["LAP_TIME_SECONDS"].notnull()]
 
-    # --- Compute average lap time per car ---
+    # --- Compute average lap per car ---
     group_cols = ["NUMBER"]
     if "TEAM" in df.columns:
         group_cols.append("TEAM")
@@ -57,13 +56,14 @@ if uploaded_file:
 
     avg_times["Average Lap (min)"] = avg_times["LAP_TIME_SECONDS"].apply(lambda x: f"{x/60:.2f}")
 
-    # --- Plot chart ---
+    # --- Horizontal Plot ---
     fig = px.bar(
         avg_times,
-        x="NUMBER",
-        y="LAP_TIME_SECONDS",
+        y="NUMBER",
+        x="LAP_TIME_SECONDS",
         color=avg_times["TEAM"] if "TEAM" in df.columns else None,
         text="Average Lap (min)",
+        orientation="h",
         title="Average Lap Time per Car",
         labels={"NUMBER": "Car Number", "LAP_TIME_SECONDS": "Average Lap Time (s)"},
     )
@@ -72,8 +72,8 @@ if uploaded_file:
         plot_bgcolor="#1e1e1e",
         paper_bgcolor="#1e1e1e",
         font_color="white",
-        xaxis=dict(showgrid=False),
-        yaxis=dict(showgrid=True, gridcolor="gray"),
+        yaxis=dict(autorange="reversed"),  # fastest car at top
+        xaxis=dict(showgrid=True, gridcolor="gray"),
         title_x=0.5
     )
 
@@ -81,7 +81,7 @@ if uploaded_file:
 
     st.plotly_chart(fig, use_container_width=True)
 
-    # --- Optional: Data Table ---
+    # --- Optional: Show data table ---
     with st.expander("View Average Lap Times Table"):
         st.dataframe(avg_times)
 

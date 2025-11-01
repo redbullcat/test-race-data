@@ -61,7 +61,16 @@ if uploaded_file:
         'Alpine Endurance Team': '#2673e2',
         'Aston Martin Thor Team': '#01655c',
         'AF Corse': '#FCE903',
-        'Proton Competition': '#fcfcff'
+        'Proton Competition': '#fcfcff',
+        'WRT': '#2426a8',
+        'United Autosports': '#FF8000',
+        'Akkodis ASP': '##ff443b',
+        'Iron Dames': '#e5017d',
+        'Manthey': '#0192cf',
+        'Heart of Racing': '#242c3f',
+        'Racing Spirit of Leman': '#428ca8',
+        'Iron Lynx': '#fefe00',
+        'TF Sport': '#eaaa1d'
     }
 
     def get_team_color(team):

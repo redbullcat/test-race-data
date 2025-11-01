@@ -10,8 +10,8 @@ uploaded_file = st.file_uploader("Upload your race CSV file", type=["csv"])
 
 if uploaded_file:
     # Handle potential BOM character in header
-    df = pd.read_csv(uploaded_file)
-    df.columns = df.columns.str.strip().str.replace('\ufeff', '')
+    df = pd.read_csv(uploaded_file, sep=';', encoding='utf-8-sig')
+    df.columns = df.columns.str.strip().str.replace('\ufeff', '').str.upper()
 
     # Ensure needed columns exist
     required_cols = {"NUMBER", "LAP_TIME", "TEAM", "CLASS"}

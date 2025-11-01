@@ -40,6 +40,26 @@ if uploaded_file:
     )
     df = df[df["CLASS"].isin(selected_classes)]
 
+    # --- New slider for top % laps filter ---
+    percentage_options = [20, 40, 60, 80, 100]
+    top_percent = st.select_slider(
+        "Select % of fastest laps per car to include:",
+        options=percentage_options,
+        value=100
+    )
+
+    # Filter laps to top X% per car
+    def filter_top_percent_laps(df, percent):
+        filtered_dfs = []
+        for car_number, group in df.groupby("NUMBER"):
+            group_sorted = group.sort_values("LAP_TIME_SECONDS")
+            n_laps = len(group_sorted)
+            n_keep = max(1, int(n_laps * percent / 100))  # Keep at least 1 lap per car
+            filtered_dfs.append(group_sorted.head(n_keep))
+        return pd.concat(filtered_dfs)
+
+    df = filter_top_percent_laps(df, top_percent)
+
     avg_df = (
         df.groupby(["NUMBER", "TEAM", "CLASS"], as_index=False)["LAP_TIME_SECONDS"]
         .mean()
@@ -76,7 +96,6 @@ if uploaded_file:
 
     avg_df["color"] = avg_df["TEAM"].apply(get_team_color)
 
-    # Combine number and team for y-axis label
     avg_df["Label"] = avg_df["NUMBER"].astype(str) + " — " + avg_df["TEAM"]
 
     fig = px.bar(
@@ -85,7 +104,6 @@ if uploaded_file:
         x="LAP_TIME_SECONDS",
         color="TEAM",
         orientation="h",
-        # Remove text on bars since labels are on y-axis now
         color_discrete_map={team: col for team, col in zip(avg_df["TEAM"], avg_df["color"])},
     )
 

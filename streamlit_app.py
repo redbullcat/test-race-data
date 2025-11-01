@@ -64,7 +64,7 @@ if uploaded_file:
         'Proton Competition': '#fcfcff',
         'WRT': '#2426a8',
         'United Autosports': '#FF8000',
-        'Akkodis ASP': '##ff443b',
+        'Akkodis ASP': '#ff443b',
         'Iron Dames': '#e5017d',
         'Manthey': '#0192cf',
         'Heart of Racing': '#242c3f',

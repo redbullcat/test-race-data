@@ -4,6 +4,7 @@ import streamlit as st
 from pace_chart import show_pace_chart
 from lap_position_chart import show_lap_position_chart
 from driver_pace_chart import show_driver_pace_chart
+from driver_pace_comparison_chart import show_driver_pace_comparison
 
 # --- Load available race data ---
 DATA_DIR = "data"
@@ -42,6 +43,9 @@ df["NUMBER"] = df.apply(
     axis=1
 )
 
+# Convert NUMBER column to string for consistency
+df["NUMBER"] = df["NUMBER"].astype(str)
+
 # --- Sidebar Filters ---
 st.sidebar.header("Filters")
 
@@ -51,8 +55,15 @@ selected_classes = st.sidebar.multiselect("Select Classes", available_classes, d
 available_cars = df["NUMBER"].unique().tolist()
 selected_cars = st.sidebar.multiselect("Select Cars", available_cars, default=available_cars)
 
-top_percent = st.sidebar.slider("Select Top Lap Percentage", 0, 100, 100, step=20,
-                                help="Use 0% to hide all data.")
+top_percent = st.sidebar.slider(
+    "Select Top Lap Percentage",
+    0,
+    100,
+    100,
+    step=20,
+    help="Use 0% to hide all data."
+)
+
 if top_percent == 0:
     st.warning("You selected 0%. You won't see any data.")
 
@@ -85,3 +96,4 @@ st.header(f"{selected_year} {selected_race} Analysis")
 show_pace_chart(df, selected_cars, top_percent, selected_classes, team_colors)
 show_lap_position_chart(df, selected_cars, selected_classes, team_colors)
 show_driver_pace_chart(df, selected_cars, top_percent, selected_classes, team_colors)
+show_driver_pace_comparison(df, team_colors)

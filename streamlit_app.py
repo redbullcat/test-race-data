@@ -52,14 +52,16 @@ if uploaded_file:
 
     # --- Team color map ---
     team_colors = {
-        'Cadillac': '#d4af37',
-        'Peugeot': '#BBD64D',
-        'Ferrari': '#d62728',
-        'Toyota': '#000000',
-        'BMW': '#2426a8',
-        'Porsche': '#ffffff',
-        'Alpine': '#2673e2',
-        'Aston Martin': '#01655c'
+        'Cadillac Hertz Team JOTA': '#d4af37',
+        'Peugeot TotalEnergies': '#BBD64D',
+        'Ferrari AF Corse': '#d62728',
+        'Toyota Gazoo Racing': '#000000',
+        'BMW M Team WRT': '#2426a8',
+        'Porsche Penske Motorsport': '#ffffff',
+        'Alpine Endurance Team': '#2673e2',
+        'Aston Martin Thor Team': '#01655c',
+        'AF Corse': '#FCE903',
+        'Proton Competition': '#fcfcff'
     }
 
     def get_team_color(team):

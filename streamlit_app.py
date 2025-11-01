@@ -1,116 +1,95 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import re
 
-st.set_page_config(page_title="Race Pace Analysis", page_icon="🏎️", layout="wide")
+st.set_page_config(page_title="Race Pace Chart", layout="wide")
 
-st.title("🏎️ Race Pace Analysis")
-st.write("Upload your race CSV to visualize the average pace per car.")
+st.title("Average Race Pace by Car")
 
-uploaded_file = st.file_uploader("Upload race CSV file", type=["csv"])
+uploaded_file = st.file_uploader("Upload your race CSV file", type=["csv"])
 
 if uploaded_file:
-    # --- Read CSV safely ---
-    try:
-        df = pd.read_csv(uploaded_file, sep=None, engine="python", encoding="utf-8-sig")
-    except Exception:
-        df = pd.read_csv(uploaded_file, sep="\t", encoding="utf-8-sig")
+    # Handle potential BOM character in header
+    df = pd.read_csv(uploaded_file)
+    df.columns = df.columns.str.strip().str.replace('\ufeff', '')
 
-    df.columns = [c.strip() for c in df.columns]
-
-    required_cols = {"NUMBER", "LAP_TIME"}
+    # Ensure needed columns exist
+    required_cols = {"NUMBER", "LAP_TIME", "TEAM", "CLASS"}
     if not required_cols.issubset(df.columns):
-        st.error(f"❌ CSV must include {required_cols}. Found columns: {list(df.columns)}")
+        st.error(f"CSV must include {required_cols}. Found columns: {list(df.columns)}")
         st.stop()
 
-    # --- Parse LAP_TIME into seconds ---
-    def to_seconds(lap_time):
-        if pd.isna(lap_time):
+    # Convert LAP_TIME to seconds
+    def lap_to_seconds(x):
+        try:
+            mins, secs = x.split(":")
+            return int(mins) * 60 + float(secs)
+        except:
             return None
-        s = str(lap_time).strip()
-        match = re.match(r"(\d+):(\d+\.\d+)", s)
-        if match:
-            m, s = match.groups()
-            return float(m) * 60 + float(s)
-        return None
 
-    df["LAP_TIME_SECONDS"] = df["LAP_TIME"].apply(to_seconds)
+    df["LAP_TIME_SECONDS"] = df["LAP_TIME"].apply(lap_to_seconds)
+    df = df.dropna(subset=["LAP_TIME_SECONDS"])
 
-    # --- Handle pit flag ---
-    if "CROSSING_FINISH_LINE_IN_PIT" in df.columns:
-        df["CROSSING_FINISH_LINE_IN_PIT"] = df["CROSSING_FINISH_LINE_IN_PIT"].astype(str).str.lower()
-        df = df[df["CROSSING_FINISH_LINE_IN_PIT"].isin(["false", "0", "no", "nan"])]
-
-    df = df[df["LAP_TIME_SECONDS"].notnull()]
-
-    if df.empty:
-        st.warning("No valid laps found in CSV after filtering.")
-        st.stop()
-
-    # --- CLASS filter ---
-    if "CLASS" in df.columns:
-        available_classes = sorted(df["CLASS"].dropna().unique())
-        selected_classes = st.multiselect(
-            "Select race classes to include:",
-            options=available_classes,
-            default=available_classes,
-        )
-        df = df[df["CLASS"].isin(selected_classes)]
-        if df.empty:
-            st.warning("No data available for the selected classes.")
-            st.stop()
-
-    # --- Compute average lap time per car ---
-    group_cols = ["NUMBER"]
-    if "TEAM" in df.columns:
-        group_cols.append("TEAM")
-    if "CLASS" in df.columns:
-        group_cols.append("CLASS")
-
-    avg_times = (
-        df.groupby(group_cols, as_index=False)["LAP_TIME_SECONDS"]
-        .mean()
-        .sort_values("LAP_TIME_SECONDS")
+    # Filter by class
+    available_classes = df["CLASS"].dropna().unique().tolist()
+    selected_classes = st.multiselect(
+        "Select classes to include:", available_classes, default=available_classes
     )
 
-    avg_times["Average Lap (min)"] = avg_times["LAP_TIME_SECONDS"].apply(lambda x: f"{x/60:.2f}")
+    df = df[df["CLASS"].isin(selected_classes)]
 
-    # --- Combine label for display ---
-    avg_times["Label"] = avg_times["NUMBER"].astype(str)
-    if "TEAM" in avg_times.columns:
-        avg_times["Label"] = avg_times["NUMBER"].astype(str) + " — " + avg_times["TEAM"]
+    # Calculate average pace per car
+    avg_df = (
+        df.groupby(["NUMBER", "TEAM", "CLASS"], as_index=False)["LAP_TIME_SECONDS"]
+        .mean()
+        .sort_values("LAP_TIME_SECONDS", ascending=True)
+    )
 
-    # --- Horizontal bar chart (one per car) ---
+    # Color map for Hypercar teams
+    team_colors = {
+        'Cadillac Hertz Team JOTA': '#d4af37',
+        'Peugeot TotalEnergies': '#BBD64D',
+        'Ferrari AF Corse': '#d62728',
+        'Toyota Gazoo Racing': '#000000',
+        'BMW M Team WRT': '#2426a8',
+        'Porsche Penske Motorsport': '#ffffff',
+        'Alpine Endurance Team': '#2673e2',
+        'Aston Martin Thor Team': '#01655c',
+        "AF Corse": "#FCE903",
+        "Proton Competition": "#fcfcff"
+    }
+
+    # Assign colors based on team name match (case-insensitive partial)
+    def get_team_color(team):
+        for key, color in team_colors.items():
+            if key.lower() in team.lower():
+                return color
+        return "#888888"  # default grey for unmatched teams
+
+    avg_df["color"] = avg_df["TEAM"].apply(get_team_color)
+
+    # Plot (horizontal bar chart)
     fig = px.bar(
-        avg_times,
-        y="Label",
+        avg_df,
+        y="NUMBER",
         x="LAP_TIME_SECONDS",
-        color="CLASS" if "CLASS" in avg_times.columns else None,
-        text="Average Lap (min)",
+        color="TEAM",
         orientation="h",
-        title="Average Lap Time per Car",
-        labels={"Label": "Car", "LAP_TIME_SECONDS": "Average Lap Time (s)"},
+        text="TEAM",
+        color_discrete_map={team: col for team, col in zip(avg_df["TEAM"], avg_df["color"])},
     )
 
     fig.update_layout(
-        plot_bgcolor="#1e1e1e",
-        paper_bgcolor="#1e1e1e",
-        font_color="white",
-        yaxis=dict(autorange="reversed"),
-        xaxis=dict(showgrid=True, gridcolor="gray"),
-        title_x=0.5,
-        height=700,
-        legend_title_text="Class",
+        plot_bgcolor="#2b2b2b",
+        paper_bgcolor="#2b2b2b",
+        font=dict(color="white", size=14),
+        xaxis_title="Average Lap Time (s)",
+        yaxis_title="Car Number",
+        title="Average Race Pace by Car",
+        title_font=dict(size=22),
+        showlegend=True,
     )
 
-    fig.update_traces(textposition="outside")
-
     st.plotly_chart(fig, use_container_width=True)
-
-    # --- Table ---
-    with st.expander("View Average Lap Times Table"):
-        st.dataframe(avg_times)
-
 else:
-    st.info("👆 Upload a CSV file to begin.")
+    st.info("Please upload a race CSV file to generate the chart.")

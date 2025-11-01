@@ -1,23 +1,21 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import re
 
 st.set_page_config(page_title="Race Pace Analysis", page_icon="🏁", layout="wide")
 
 st.title("🏁 Race Pace Analysis")
 st.write("Upload your race CSV to visualize the average pace per car.")
 
-# --- File Upload ---
 uploaded_file = st.file_uploader("Upload race CSV file", type=["csv"])
 
 if uploaded_file:
-    # Read CSV and handle UTF-8 BOM automatically
     try:
         df = pd.read_csv(uploaded_file, sep=None, engine="python", encoding="utf-8-sig")
     except Exception:
         df = pd.read_csv(uploaded_file, sep="\t", encoding="utf-8-sig")
 
-    # Clean column names
     df.columns = [c.strip() for c in df.columns]
 
     required_cols = {"NUMBER", "LAP_TIME"}
@@ -28,22 +26,31 @@ if uploaded_file:
         )
         st.stop()
 
-    # --- Convert LAP_TIME to seconds ---
+    # --- Convert LAP_TIME to seconds robustly ---
     def to_seconds(lap_time):
-        try:
-            m, s = str(lap_time).split(":")
-            return float(m) * 60 + float(s)
-        except Exception:
+        if pd.isna(lap_time):
             return None
+        s = str(lap_time).strip()
+        match = re.match(r"(\d+):(\d+\.\d+)", s)
+        if match:
+            m, s = match.groups()
+            return float(m) * 60 + float(s)
+        return None
 
     df["LAP_TIME_SECONDS"] = df["LAP_TIME"].apply(to_seconds)
 
-    # --- Filter valid laps ---
+    # --- Fix boolean/text columns for pit filtering ---
     if "CROSSING_FINISH_LINE_IN_PIT" in df.columns:
-        df = df[df["CROSSING_FINISH_LINE_IN_PIT"] == False]
+        df["CROSSING_FINISH_LINE_IN_PIT"] = df["CROSSING_FINISH_LINE_IN_PIT"].astype(str).str.lower()
+        df = df[df["CROSSING_FINISH_LINE_IN_PIT"].isin(["false", "0", "no", "nan"])]
+
+    # --- Keep only valid lap times ---
     df = df[df["LAP_TIME_SECONDS"].notnull()]
 
-    # --- Compute average lap per car ---
+    # --- Check data size ---
+    st.write(f"✅ Loaded {len(df):,} valid laps from file")
+
+    # --- Compute average lap time per car ---
     group_cols = ["NUMBER"]
     if "TEAM" in df.columns:
         group_cols.append("TEAM")
@@ -53,6 +60,11 @@ if uploaded_file:
         .mean()
         .sort_values("LAP_TIME_SECONDS")
     )
+
+    if avg_times.empty:
+        st.warning("No valid lap times found after filtering. Check LAP_TIME format or pit flag values.")
+        st.dataframe(df.head())
+        st.stop()
 
     avg_times["Average Lap (min)"] = avg_times["LAP_TIME_SECONDS"].apply(lambda x: f"{x/60:.2f}")
 
@@ -72,7 +84,7 @@ if uploaded_file:
         plot_bgcolor="#1e1e1e",
         paper_bgcolor="#1e1e1e",
         font_color="white",
-        yaxis=dict(autorange="reversed"),  # fastest car at top
+        yaxis=dict(autorange="reversed"),
         xaxis=dict(showgrid=True, gridcolor="gray"),
         title_x=0.5
     )
@@ -81,7 +93,7 @@ if uploaded_file:
 
     st.plotly_chart(fig, use_container_width=True)
 
-    # --- Optional: Show data table ---
+    # --- Data Table ---
     with st.expander("View Average Lap Times Table"):
         st.dataframe(avg_times)
 

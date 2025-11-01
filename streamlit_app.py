@@ -79,6 +79,9 @@ if uploaded_file:
         color_discrete_map={team: col for team, col in zip(avg_df["TEAM"], avg_df["color"])},
     )
 
+    # Make y-axis categorical (each car shown individually)
+    fig.update_yaxes(type='category', categoryorder='array', categoryarray=avg_df['NUMBER'])
+
     fig.update_layout(
         plot_bgcolor="#2b2b2b",
         paper_bgcolor="#2b2b2b",

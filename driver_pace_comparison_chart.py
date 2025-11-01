@@ -22,13 +22,17 @@ def show_driver_pace_comparison(df, team_colors):
         st.info("Please select at least two drivers to compare.")
         return
 
-    # Checkbox for lap percentiles
+    # Checkbox for lap percentiles displayed horizontally using columns
     st.markdown("### Select Lap Percentiles to Display")
     percentile_options = [20, 40, 60, 80, 100]
+
+    cols = st.columns(len(percentile_options))
     selected_percentiles = []
-    for p in percentile_options:
-        if st.checkbox(f"Top {p}%", value=(p==100)):
+    for idx, p in enumerate(percentile_options):
+        checked = cols[idx].checkbox(f"Top {p}%", value=(p == 100))
+        if checked:
             selected_percentiles.append(p)
+
     if not selected_percentiles:
         st.warning("Select at least one percentile range to display.")
         return
@@ -48,6 +52,7 @@ def show_driver_pace_comparison(df, team_colors):
 
     # Prepare data for each percentile group
     data = []
+    y_values_all = []  # For dynamic y-axis range
     for p in selected_percentiles:
         avg_pace = []
         for driver in selected_drivers:
@@ -58,6 +63,13 @@ def show_driver_pace_comparison(df, team_colors):
             avg_time = top_laps["LAP_TIME_SECONDS"].mean()
             avg_pace.append(avg_time)
         data.append((p, avg_pace))
+        y_values_all.extend(avg_pace)
+
+    # Determine dynamic y-axis range with padding
+    y_min = min(y_values_all) if y_values_all else 0
+    y_max = max(y_values_all) if y_values_all else 1
+    padding = (y_max - y_min) * 0.05  # 5% padding
+    y_range = [y_max + padding, max(0, y_min - padding)]  # reversed axis: max at bottom, min at top, but 0 at top if min < 0
 
     # Build bar traces
     fig = go.Figure()
@@ -81,6 +93,7 @@ def show_driver_pace_comparison(df, team_colors):
         font_color="white",
         legend_title="Percentile Range",
     )
-    fig.update_yaxes(autorange="reversed")  # so fastest times are on top
+
+    fig.update_yaxes(autorange="reversed", range=y_range)
 
     st.plotly_chart(fig, use_container_width=True)

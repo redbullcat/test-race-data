@@ -4,6 +4,14 @@ import streamlit as st
 
 def show_pace_chart(df, selected_cars, top_percent, selected_classes, team_colors):
 
+    # Apply class filter
+    if selected_classes and "CLASS" in df.columns:
+        df = df[df["CLASS"].isin(selected_classes)]
+
+    # Apply car filter
+    if selected_cars and "NUMBER" in df.columns:
+        df = df[df["NUMBER"].isin(selected_cars)]
+
     def lap_to_seconds(x):
         try:
             mins, secs = x.split(":")

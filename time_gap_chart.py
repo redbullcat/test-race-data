@@ -48,7 +48,6 @@ def show_time_gap_chart_debug(df, team_colors):
     )
 
     display_df = last_lap_times[['NUMBER', 'TEAM', 'LAP_NUMBER', 'ELAPSED']]
-    display_df = display_df.head(5)
 
-    st.markdown(f"### Top 5 Cars in Class '{selected_class}' Ordered by Laps and Elapsed Time")
+    st.markdown(f"### All Cars in Class '{selected_class}' Ordered by Laps and Elapsed Time")
     st.dataframe(display_df)

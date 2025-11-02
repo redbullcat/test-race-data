@@ -42,6 +42,24 @@ def show_time_gap_chart(df, team_colors):
     class_df['LAP_NUMBER'] = pd.to_numeric(class_df['LAP_NUMBER'], errors='coerce')
     class_df = class_df.dropna(subset=['ELAPSED_SECONDS', 'LAP_NUMBER'])
 
+    # --- DEBUG: Show top 5 cars by total elapsed time per class ---
+    st.markdown("### Debug: Top 5 cars by total elapsed time per class")
+    for race_class in df['CLASS'].dropna().unique():
+        st.markdown(f"**Class: {race_class}**")
+        class_subset = df[df['CLASS'] == race_class].copy()
+
+        # Get last lap row per car (assumed total race time)
+        last_lap_times = class_subset.groupby('NUMBER').apply(
+            lambda x: x.sort_values('LAP_NUMBER').iloc[-1]
+        ).reset_index(drop=True)
+
+        last_lap_times['ELAPSED_SECONDS'] = last_lap_times['ELAPSED'].apply(to_seconds)
+
+        display_df = last_lap_times[['NUMBER', 'TEAM', 'ELAPSED', 'ELAPSED_SECONDS']]
+        display_df = display_df.sort_values('ELAPSED_SECONDS').head(5)
+
+        st.dataframe(display_df)
+
     # --- Prepare reference car (first selected car) ---
     reference_car = selected_cars[0]
     ref_data = class_df[class_df["NUMBER"] == reference_car][["LAP_NUMBER", "ELAPSED_SECONDS"]].sort_values("LAP_NUMBER")

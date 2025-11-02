@@ -60,9 +60,18 @@ def show_time_gap_chart_debug(df, team_colors):
             gap = row['ELAPSED_SECONDS'] - leader_time
             return f"{gap:.3f} s"
 
-    last_lap_times['interval'] = last_lap_times.apply(calculate_interval, axis=1)
+    # Calculate gap to leader (numeric seconds, 0 for leader or laps down)
+    def calculate_gap_to_leader(row):
+        laps_down = leader_lap - row['LAP_NUMBER']
+        if laps_down >= 1:
+            return None  # or np.nan if preferred
+        else:
+            return row['ELAPSED_SECONDS'] - leader_time
 
-    display_df = last_lap_times[['NUMBER', 'TEAM', 'LAP_NUMBER', 'ELAPSED', 'interval']]
+    last_lap_times['interval'] = last_lap_times.apply(calculate_interval, axis=1)
+    last_lap_times['Gap to leader (s)'] = last_lap_times.apply(calculate_gap_to_leader, axis=1)
+
+    display_df = last_lap_times[['NUMBER', 'TEAM', 'LAP_NUMBER', 'ELAPSED', 'interval', 'Gap to leader (s)']]
 
     st.markdown(f"### All Cars in Class '{selected_class}' Ordered by Laps and Elapsed Time with Interval")
     st.dataframe(display_df)

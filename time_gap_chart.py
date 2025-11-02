@@ -28,7 +28,7 @@ def show_time_gap_chart(df, team_colors):
     # --- Convert ELAPSED to seconds ---
     def to_seconds(t):
         try:
-            parts = t.split(":")
+            parts = str(t).split(":")
             if len(parts) == 2:  # mm:ss.sss
                 m, s = parts
                 return int(m) * 60 + float(s)
@@ -44,11 +44,15 @@ def show_time_gap_chart(df, team_colors):
     # --- Filter only selected cars ---
     class_df = class_df[class_df["NUMBER"].isin(selected_cars)]
 
-    # --- Create lap-based structure ---
+    # --- Build aligned lap-time data ---
     gap_data = []
     for car, group in class_df.groupby("NUMBER"):
-        group = group.sort_values("LAP")
-        gap_data.append(group[["LAP", "ELAPSED_SECONDS"]].set_index("LAP").rename(columns={"ELAPSED_SECONDS": car}))
+        group = group.sort_values("LAP_NUMBER")
+        gap_data.append(
+            group[["LAP_NUMBER", "ELAPSED_SECONDS"]]
+            .set_index("LAP_NUMBER")
+            .rename(columns={"ELAPSED_SECONDS": car})
+        )
     merged = pd.concat(gap_data, axis=1)
 
     # --- Compute gaps relative to first selected car ---
@@ -76,7 +80,7 @@ def show_time_gap_chart(df, team_colors):
 
         fig.add_trace(
             go.Scatter(
-                x=merged["LAP"],
+                x=merged["LAP_NUMBER"],
                 y=merged[car],
                 mode="lines",
                 name=f"{car} — {car_team}",

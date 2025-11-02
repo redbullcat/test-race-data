@@ -2,14 +2,14 @@ import pandas as pd
 import streamlit as st
 
 def show_time_gap_chart_debug(df, team_colors):
-    st.subheader("⏱️ Time Gap Comparison - Debug Output Only")
+    st.subheader("⏱️ Time Gap Comparison - Debug Output Ordered by Laps and Time")
 
     # --- Class selection ---
     available_classes = sorted(df["CLASS"].dropna().unique())
     selected_class = st.selectbox("Select Class for Debug", available_classes)
     class_df = df[df["CLASS"] == selected_class]
 
-    # --- Convert ELAPSED column (format: mm:ss.sss or h:mm:ss.sss) to total seconds ---
+    # --- Convert ELAPSED time string to total seconds ---
     def to_seconds(t):
         if pd.isna(t):
             return None
@@ -31,20 +31,24 @@ def show_time_gap_chart_debug(df, team_colors):
     class_df['LAP_NUMBER'] = pd.to_numeric(class_df['LAP_NUMBER'], errors='coerce')
     class_df = class_df.dropna(subset=['ELAPSED_SECONDS', 'LAP_NUMBER'])
 
-    # --- DEBUG: Show top 5 cars by total elapsed time per class ---
-    st.markdown("### Debug: Top 5 cars by total elapsed time per class")
-    for race_class in df['CLASS'].dropna().unique():
-        st.markdown(f"**Class: {race_class}**")
-        class_subset = df[df['CLASS'] == race_class].copy()
+    # --- Get last lap row per car (total race time) ---
+    last_lap_times = (
+        class_df.groupby('NUMBER')
+        .apply(lambda x: x.loc[x['LAP_NUMBER'].idxmax()])
+        .reset_index(drop=True)
+    )
 
-        # Get last lap row per car (assumed total race time)
-        last_lap_times = class_subset.groupby('NUMBER').apply(
-            lambda x: x.sort_values('LAP_NUMBER').iloc[-1]
-        ).reset_index(drop=True)
+    # Convert ELAPSED to seconds for sorting
+    last_lap_times['ELAPSED_SECONDS'] = last_lap_times['ELAPSED'].apply(to_seconds)
 
-        last_lap_times['ELAPSED_SECONDS'] = last_lap_times['ELAPSED'].apply(to_seconds)
+    # Sort by laps desc, then elapsed seconds asc
+    last_lap_times = last_lap_times.sort_values(
+        by=['LAP_NUMBER', 'ELAPSED_SECONDS'],
+        ascending=[False, True]
+    )
 
-        display_df = last_lap_times[['NUMBER', 'TEAM', 'ELAPSED', 'ELAPSED_SECONDS']]
-        display_df = display_df.sort_values('ELAPSED_SECONDS').head(5)
+    display_df = last_lap_times[['NUMBER', 'TEAM', 'LAP_NUMBER', 'ELAPSED']]
+    display_df = display_df.head(5)
 
-        st.dataframe(display_df)
+    st.markdown(f"### Top 5 Cars in Class '{selected_class}' Ordered by Laps and Elapsed Time")
+    st.dataframe(display_df)

@@ -5,7 +5,6 @@ from pace_chart import show_pace_chart
 from lap_position_chart import show_lap_position_chart
 from driver_pace_chart import show_driver_pace_chart
 from driver_pace_comparison_chart import show_driver_pace_comparison
-from time_gap_chart import show_time_gap_chart_debug
 
 # --- Load available race data ---
 DATA_DIR = "data"
@@ -98,4 +97,3 @@ show_pace_chart(df, selected_cars, top_percent, selected_classes, team_colors)
 show_lap_position_chart(df, selected_cars, selected_classes, team_colors)
 show_driver_pace_chart(df, selected_cars, top_percent, selected_classes, team_colors)
 show_driver_pace_comparison(df, team_colors)
-show_time_gap_chart_debug(df, team_colors)

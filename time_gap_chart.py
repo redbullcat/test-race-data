@@ -1,7 +1,7 @@
 import pandas as pd
 import streamlit as st
 
-def show_time_gap_chart(df, team_colors):
+def show_time_gap_chart_debug(df, team_colors):
     st.subheader("⏱️ Time Gap Comparison - Debug Output Only")
 
     # --- Class selection ---

@@ -20,52 +20,47 @@ def show_time_gap_chart(df, team_colors):
         st.info("Select at least two cars to see the time gap chart.")
         return
 
-    # --- Ensure ELAPSED column exists ---
-    if "ELAPSED" not in df.columns:
-        st.error("No 'ELAPSED' column found.")
-        return
-
-    # --- Convert ELAPSED to timedelta robustly ---
-    def parse_elapsed(value):
-        if pd.isna(value):
-            return pd.NaT
-        value = str(value).strip()
+    # --- Convert ELAPSED column (format: mm:ss.sss or h:mm:ss.sss) to total seconds ---
+    def to_seconds(t):
+        if pd.isna(t):
+            return None
+        t = str(t).strip()
+        parts = t.split(':')
         try:
-            parts = value.split(":")
-            if len(parts) == 2:  # mm:ss.sss
-                return pd.to_timedelta("0:" + value)
-            elif len(parts) == 3:
+            if len(parts) == 3:
                 h, m, s = parts
-                # if hours part >= 60, it’s actually minutes
-                if int(h) >= 60:
-                    return pd.to_timedelta("0:" + value)
-                else:
-                    return pd.to_timedelta(value)
+                return int(h) * 3600 + int(m) * 60 + float(s)
+            elif len(parts) == 2:
+                m, s = parts
+                return int(m) * 60 + float(s)
         except Exception:
-            return pd.NaT
-        return pd.NaT
+            return None
+        return None
 
-    df["ELAPSED_TD"] = df["ELAPSED"].astype(str).apply(parse_elapsed)
-    df["LAP_NUMBER"] = pd.to_numeric(df["LAP_NUMBER"], errors="coerce")
+    class_df = class_df.copy()
+    class_df['ELAPSED_SECONDS'] = class_df['ELAPSED'].apply(to_seconds)
+    class_df['LAP_NUMBER'] = pd.to_numeric(class_df['LAP_NUMBER'], errors='coerce')
+    class_df = class_df.dropna(subset=['ELAPSED_SECONDS', 'LAP_NUMBER'])
 
-    # --- Build reference and comparison traces ---
+    # --- Prepare reference car (first selected car) ---
     reference_car = selected_cars[0]
-    ref_data = df[df["NUMBER"] == reference_car][["LAP_NUMBER", "ELAPSED_TD"]].dropna()
-    ref_data = ref_data.sort_values("LAP_NUMBER").rename(columns={"ELAPSED_TD": "REF_TIME"})
+    ref_data = class_df[class_df["NUMBER"] == reference_car][["LAP_NUMBER", "ELAPSED_SECONDS"]].sort_values("LAP_NUMBER")
+    ref_data = ref_data.rename(columns={"ELAPSED_SECONDS": "REF_TIME"})
 
     fig = go.Figure()
 
+    # --- Plot gaps of other cars vs reference ---
     for car in selected_cars[1:]:
-        car_data = df[df["NUMBER"] == car][["LAP_NUMBER", "ELAPSED_TD"]].dropna()
-        car_data = car_data.sort_values("LAP_NUMBER").rename(columns={"ELAPSED_TD": "CAR_TIME"})
+        car_data = class_df[class_df["NUMBER"] == car][["LAP_NUMBER", "ELAPSED_SECONDS"]].sort_values("LAP_NUMBER")
+        car_data = car_data.rename(columns={"ELAPSED_SECONDS": "CAR_TIME"})
 
         merged = pd.merge(ref_data, car_data, on="LAP_NUMBER", how="inner")
         if merged.empty:
             continue
 
-        merged["GAP_SECONDS"] = (merged["CAR_TIME"] - merged["REF_TIME"]).dt.total_seconds()
+        merged["GAP_SECONDS"] = merged["CAR_TIME"] - merged["REF_TIME"]
 
-        team = df.loc[df["NUMBER"] == car, "TEAM"].iloc[0] if not df[df["NUMBER"] == car].empty else "Unknown"
+        team = class_df.loc[class_df["NUMBER"] == car, "TEAM"].iloc[0] if not class_df[class_df["NUMBER"] == car].empty else "Unknown"
         color = team_colors.get(team, "#888888")
 
         fig.add_trace(go.Scatter(
@@ -81,7 +76,7 @@ def show_time_gap_chart(df, team_colors):
     if all_y:
         y_min, y_max = min(all_y), max(all_y)
         margin = (y_max - y_min) * 0.1
-        y_range = [y_max + margin, y_min - margin]  # reversed
+        y_range = [y_max + margin, y_min - margin]  # reversed axis
     else:
         y_range = [1, 0]
 

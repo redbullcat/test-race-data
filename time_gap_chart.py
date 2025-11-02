@@ -1,107 +1,92 @@
-import plotly.graph_objects as go
 import pandas as pd
+import plotly.express as px
 import streamlit as st
 
-
 def show_time_gap_chart(df, team_colors):
-    st.subheader("⏱️ Time Gap Comparison")
+    st.subheader("Driver Pace Comparison")
 
-    # --- Select class ---
-    classes = sorted(df["CLASS"].dropna().unique())
-    selected_class = st.selectbox("Select Class", classes, key="gap_class_select")
-
-    class_df = df[df["CLASS"] == selected_class]
-
-    # --- Select cars within class ---
-    cars_in_class = sorted(class_df["NUMBER"].unique())
-    selected_cars = st.multiselect(
-        "Select Cars to Compare",
-        cars_in_class,
-        default=cars_in_class[:2],
-        key="gap_car_select"
+    # --- Streamlit filters ---
+    all_cars = sorted(df["CAR_NUMBER"].unique())
+    car_options = st.multiselect(
+        "Select two cars to compare:",
+        options=all_cars,
+        default=all_cars[:2],
+        max_selections=2
     )
 
-    if len(selected_cars) < 2:
-        st.info("Please select at least two cars to compare.")
+    if len(car_options) != 2:
+        st.warning("Please select exactly two cars.")
         return
 
-    # --- Convert ELAPSED to seconds ---
-    def to_seconds(t):
-        try:
-            parts = str(t).split(":")
-            if len(parts) == 2:  # mm:ss.sss
-                m, s = parts
-                return int(m) * 60 + float(s)
-            elif len(parts) == 3:  # h:mm:ss.sss
-                h, m, s = parts
-                return int(h) * 3600 + int(m) * 60 + float(s)
-        except:
-            return None
+    car1, car2 = car_options
 
-    class_df["ELAPSED_SECONDS"] = class_df["ELAPSED"].apply(to_seconds)
-    class_df = class_df.dropna(subset=["ELAPSED_SECONDS"])
+    # --- Ensure proper data types ---
+    if "LAP_NUMBER" not in df.columns:
+        st.error("Missing required column: LAP_NUMBER")
+        return
 
-    # --- Filter only selected cars ---
-    class_df = class_df[class_df["NUMBER"].isin(selected_cars)]
+    # Convert race time columns if needed
+    # Try both formats: total race time or cumulative lap time
+    time_col_candidates = [c for c in df.columns if "TIME" in c.upper()]
+    if not time_col_candidates:
+        st.error("No TIME-related column found in DataFrame.")
+        return
 
-    # --- Build aligned lap-time data ---
-    gap_data = []
-    for car, group in class_df.groupby("NUMBER"):
-        group = group.sort_values("LAP_NUMBER")
-        gap_data.append(
-            group[["LAP_NUMBER", "ELAPSED_SECONDS"]]
-            .set_index("LAP_NUMBER")
-            .rename(columns={"ELAPSED_SECONDS": car})
-        )
-    merged = pd.concat(gap_data, axis=1)
+    # Pick the first matching time column
+    time_col = time_col_candidates[0]
 
-    # --- Compute gaps relative to first selected car ---
-    leader = selected_cars[0]
-    for car in selected_cars:
-        merged[car] = merged[car] - merged[leader]
+    # Convert to timedelta if in string format (e.g., "6:00:28.365")
+    if df[time_col].dtype == object:
+        df[time_col] = pd.to_timedelta(df[time_col])
 
-    merged = merged.reset_index()
+    # --- Filter both cars ---
+    df_car1 = df[df["CAR_NUMBER"] == car1].sort_values("LAP_NUMBER")
+    df_car2 = df[df["CAR_NUMBER"] == car2].sort_values("LAP_NUMBER")
 
-    # --- Plot ---
-    fig = go.Figure()
+    # --- Merge by LAP_NUMBER ---
+    merged = pd.merge(
+        df_car1[["LAP_NUMBER", time_col]],
+        df_car2[["LAP_NUMBER", time_col]],
+        on="LAP_NUMBER",
+        suffixes=(f"_{car1}", f"_{car2}")
+    )
 
-    for car in selected_cars:
-        color = None
-        car_team = (
-            df[df["NUMBER"] == car]["TEAM"].iloc[0]
-            if not df[df["NUMBER"] == car]["TEAM"].empty
-            else ""
-        )
-        for key, col in team_colors.items():
-            if key.lower() in car_team.lower():
-                color = col
-                break
-        color = color or "#888888"
+    # --- Calculate gap in seconds ---
+    merged["GAP_SECONDS"] = (
+        merged[f"{time_col}_{car2}"] - merged[f"{time_col}_{car1}"]
+    ).dt.total_seconds()
 
-        fig.add_trace(
-            go.Scatter(
-                x=merged["LAP_NUMBER"],
-                y=merged[car],
-                mode="lines",
-                name=f"{car} — {car_team}",
-                line=dict(color=color, width=2),
-            )
-        )
+    # --- Sanity check ---
+    final_gap = merged["GAP_SECONDS"].iloc[-1]
+    st.write(f"**Final gap:** {final_gap:.3f} seconds")
+
+    # --- Create chart ---
+    fig = px.line(
+        merged,
+        x="LAP_NUMBER",
+        y="GAP_SECONDS",
+        title=f"Gap between car {car1} and car {car2}",
+        labels={"LAP_NUMBER": "Lap", "GAP_SECONDS": "Time gap (s)"},
+    )
+
+    # --- Styling ---
+    color1 = team_colors.get(car1, "#AAAAAA")
+    color2 = team_colors.get(car2, "#CCCCCC")
+    fig.update_traces(line=dict(color=color2, width=3))
 
     fig.update_layout(
         plot_bgcolor="#2b2b2b",
         paper_bgcolor="#2b2b2b",
-        font=dict(color="white", size=14),
-        xaxis_title="Lap Number",
-        yaxis_title=f"Gap to Car {leader} (s)",
-        title=f"Time Gap Comparison — {selected_class}",
-        title_font=dict(size=22),
-        legend=dict(
-            bgcolor="rgba(0,0,0,0.4)",
-            bordercolor="gray",
-            borderwidth=1
+        font=dict(color="white"),
+        yaxis=dict(
+            title="Gap (s)",
+            rangemode="normal",
+            autorange=True
         ),
+        xaxis=dict(title="Lap"),
+        title=dict(x=0.5),
+        hovermode="x unified",
     )
 
-    fig.update_yaxes(autorange=True)
+    # --- Display chart ---
     st.plotly_chart(fig, use_container_width=True)

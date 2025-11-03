@@ -61,6 +61,9 @@ def show_results_tables(df, team_colors):
         # Sort by laps completed and total time
         class_cars = class_cars.sort_values(['LAP_NUMBER', 'ELAPSED_SECONDS'], ascending=[False, True]).reset_index(drop=True)
 
+        # ✅ Add Position column (starting from 1)
+        class_cars.insert(0, "Position", range(1, len(class_cars) + 1))
+
         # Compute interval & gap to leader
         leader_time = class_cars.iloc[0]['ELAPSED_SECONDS']
         leader_laps = class_cars.iloc[0]['LAP_NUMBER']
@@ -129,7 +132,7 @@ def show_results_tables(df, team_colors):
         class_cars['Total Time'] = class_cars['ELAPSED_SECONDS'].apply(format_time)
 
         display_cols = [
-            'NUMBER', 'TEAM', 'DRIVER', 'LAP_NUMBER',
+            'Position', 'NUMBER', 'TEAM', 'DRIVER', 'LAP_NUMBER',
             'Interval', 'Gap to Leader', 'Fastest Lap', 'Total Time'
         ]
 

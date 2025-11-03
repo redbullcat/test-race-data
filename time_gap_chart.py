@@ -63,9 +63,10 @@ def show_time_gap_chart_debug(df, team_colors):
     )
 
     # --- Get last lap row per car (total race time) ---
+    # Added include_group=False to avoid FutureWarning
     last_lap_times = (
         class_df.groupby("NUMBER")
-        .apply(lambda x: x.loc[x["LAP_NUMBER"].idxmax()])
+        .apply(lambda x: x.loc[x["LAP_NUMBER"].idxmax()], include_group=False)
         .reset_index(drop=True)
     )
 
@@ -135,7 +136,10 @@ def show_time_gap_chart_debug(df, team_colors):
     display_df.insert(0, "Position", range(1, len(display_df) + 1))
 
     # --- Highlight absolute fastest lap in class ---
+    def style_func(v):
+        if isinstance(v, str) and "(" in v and str(fastest_class_lap_time) in v:
+            return "font-weight: bold; color: #00FFAA;"
+        return ""
+
     st.markdown(f"### All Cars in Class '{selected_class}' Ordered by Laps, Gaps, and Fastest Laps")
-    st.dataframe(display_df.style.applymap(
-        lambda v: "font-weight: bold; color: #00FFAA;" if isinstance(v, str) and "(" in v and str(fastest_class_lap_time) in v else ""
-    ))
+    st.dataframe(display_df.style.map(style_func, subset=pd.IndexSlice[:, :]), width='stretch')

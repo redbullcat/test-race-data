@@ -2,163 +2,129 @@ import pandas as pd
 import streamlit as st
 
 def show_results_tables(df, team_colors):
-    st.subheader("🏁 Race Results by Class (Debug Mode)")
+    st.subheader("🏁 Race Results by Class")
 
-    # --- Convert ELAPSED column to seconds ---
+    # --- Helper: Convert ELAPSED to total seconds ---
     def to_seconds(t):
         if pd.isna(t):
             return None
         t = str(t).strip()
         parts = t.split(':')
         try:
-            if len(parts) == 3:
+            if len(parts) == 3:  # h:mm:ss.sss
                 h, m, s = parts
                 return int(h) * 3600 + int(m) * 60 + float(s)
-            elif len(parts) == 2:
+            elif len(parts) == 2:  # mm:ss.sss
                 m, s = parts
                 return int(m) * 60 + float(s)
         except Exception:
             return None
         return None
 
-    # Ensure proper types
-    df = df.copy()
-    df['LAP_NUMBER'] = pd.to_numeric(df['LAP_NUMBER'], errors='coerce')
-    df['ELAPSED_SECONDS'] = df['ELAPSED'].apply(to_seconds)
+    # --- Helper: Get fastest lap for each car ---
+    def get_fastest_lap(car_df):
+        car_df = car_df.copy()
+        car_df["LAP_TIME_S"] = car_df["LAP_TIME"].apply(to_seconds)
+        car_df = car_df.dropna(subset=["LAP_TIME_S"])
+        if len(car_df) == 0:
+            return pd.Series({"Fastest Lap": None})
+        best_row = car_df.loc[car_df["LAP_TIME_S"].idxmin()]
+        formatted = f"{best_row['LAP_TIME']} ({best_row['DRIVER']})"
+        return pd.Series({"Fastest Lap": formatted, "Fastest Lap Time": best_row["LAP_TIME_S"]})
 
-    # --- Calculate total elapsed per car (last lap) ---
-    last_lap = (
-        df.sort_values('LAP_NUMBER')
-        .groupby('NUMBER')
-        .tail(1)
-        .reset_index(drop=True)
-    )
+    # --- Precompute fastest laps for all cars ---
+    car_fastest = df.groupby("NUMBER").apply(get_fastest_lap).reset_index()
 
-    # --- Add fastest lap per car ---
-    def get_fastest_lap(group):
-        valid = group.dropna(subset=['LAP_TIME'])
-        if valid.empty:
-            return None, None
-        valid = valid.copy()
-        valid['LAP_TIME_SEC'] = valid['LAP_TIME'].astype(str).apply(to_seconds)
-        best_row = valid.loc[valid['LAP_TIME_SEC'].idxmin()]
-        # DRIVER_NAME expected in your data
-        driver_col = 'DRIVER_NAME' if 'DRIVER_NAME' in best_row.index else ('DRIVER' if 'DRIVER' in best_row.index else None)
-        return best_row['LAP_TIME'], best_row[driver_col] if driver_col else None
+    # --- Process results by class ---
+    for race_class in sorted(df["CLASS"].dropna().unique()):
+        st.markdown(f"### **Class: {race_class}**")
 
-    car_fastest = df.groupby('NUMBER').apply(get_fastest_lap).reset_index()
-    car_fastest.columns = ['NUMBER', 'FastestData']
-    car_fastest[['FASTEST_LAP', 'FASTEST_DRIVER']] = pd.DataFrame(car_fastest['FastestData'].tolist(), index=car_fastest.index)
-    car_fastest.drop(columns=['FastestData'], inplace=True)
+        class_subset = df[df["CLASS"] == race_class].copy()
+        class_subset["ELAPSED_SECONDS"] = class_subset["ELAPSED"].apply(to_seconds)
+        class_subset["LAP_NUMBER"] = pd.to_numeric(class_subset["LAP_NUMBER"], errors="coerce")
 
-    last_lap = last_lap.merge(car_fastest, on='NUMBER', how='left')
+        # Last lap row per car = finish time
+        last_lap_times = (
+            class_subset.groupby("NUMBER", as_index=False)
+            .apply(lambda x: x.sort_values("LAP_NUMBER").iloc[-1])
+            .reset_index(drop=True)
+        )
 
-    # --- Build per-class results ---
-    for race_class in sorted(df['CLASS'].dropna().unique()):
-        st.markdown(f"### 🏎️ {race_class} Class Results")
+        # Merge fastest lap info
+        last_lap_times = last_lap_times.merge(car_fastest, on="NUMBER", how="left")
 
-        class_cars = last_lap[last_lap['CLASS'] == race_class].copy()
-        if class_cars.empty:
-            st.info(f"No data found for class {race_class}")
-            continue
+        # Sort: first by LAP_NUMBER desc (more laps = ahead), then by ELAPSED_SECONDS asc
+        last_lap_times = last_lap_times.sort_values(
+            by=["LAP_NUMBER", "ELAPSED_SECONDS"], ascending=[False, True]
+        ).reset_index(drop=True)
 
-        # Sort by laps completed and total time
-        class_cars = class_cars.sort_values(['LAP_NUMBER', 'ELAPSED_SECONDS'], ascending=[False, True]).reset_index(drop=True)
+        # Add Position (1-based)
+        last_lap_times.insert(0, "Position", range(1, len(last_lap_times) + 1))
 
-        # ✅ Add Position column (starting from 1)
-        class_cars.insert(0, "Position", range(1, len(class_cars) + 1))
+        # Determine interval and gap to leader
+        leader_time = last_lap_times.iloc[0]["ELAPSED_SECONDS"]
+        leader_laps = last_lap_times.iloc[0]["LAP_NUMBER"]
 
-        # Compute interval & gap to leader
-        leader_time = class_cars.iloc[0]['ELAPSED_SECONDS']
-        leader_laps = class_cars.iloc[0]['LAP_NUMBER']
+        intervals = []
+        gaps_to_leader = []
 
-        intervals, gaps = [None], [0.0]
-        for i in range(1, len(class_cars)):
-            car = class_cars.iloc[i]
-            prev = class_cars.iloc[i - 1]
-            if car['LAP_NUMBER'] < leader_laps:
-                laps_down = int(leader_laps - car['LAP_NUMBER'])
-                interval = f"{laps_down} lap"
-                gap = f"{laps_down} lap"
+        for i, row in last_lap_times.iterrows():
+            if i == 0:
+                intervals.append("—")
+                gaps_to_leader.append("—")
+                continue
+
+            lap_diff_prev = last_lap_times.iloc[i - 1]["LAP_NUMBER"] - row["LAP_NUMBER"]
+            lap_diff_leader = leader_laps - row["LAP_NUMBER"]
+
+            if lap_diff_prev > 0:
+                intervals.append(f"{int(lap_diff_prev)} lap")
             else:
-                interval_val = car['ELAPSED_SECONDS'] - prev['ELAPSED_SECONDS']
-                gap_val = car['ELAPSED_SECONDS'] - leader_time
-                interval = f"{interval_val:.3f}s"
-                gap = f"{gap_val:.3f}s"
-            intervals.append(interval)
-            gaps.append(gap)
+                diff_prev = row["ELAPSED_SECONDS"] - last_lap_times.iloc[i - 1]["ELAPSED_SECONDS"]
+                intervals.append(f"{diff_prev:.3f}s")
 
-        class_cars['Interval'] = intervals
-        class_cars['Gap to Leader'] = gaps
-
-        # Combine drivers list into a single column (if multiple drivers)
-        driver_col_name = None
-        if 'DRIVER_NAME' in df.columns:
-            driver_col_name = 'DRIVER_NAME'
-        elif 'DRIVER' in df.columns:
-            driver_col_name = 'DRIVER'
-
-        if driver_col_name:
-            drivers_by_car = (
-                df.groupby('NUMBER')[driver_col_name]
-                .unique()
-                .apply(lambda d: " / ".join(map(str, d)))
-                .reset_index()
-                .rename(columns={driver_col_name: 'DRIVERS'})
-            )
-            class_cars = class_cars.merge(drivers_by_car, on='NUMBER', how='left')
-        else:
-            class_cars['DRIVERS'] = None
-
-        # Identify fastest lap in class
-        all_fastest = df[df['CLASS'] == race_class].copy()
-        all_fastest['LAP_TIME_SEC'] = all_fastest['LAP_TIME'].apply(to_seconds)
-        if not all_fastest['LAP_TIME_SEC'].dropna().empty:
-            best_lap_sec = all_fastest['LAP_TIME_SEC'].min()
-        else:
-            best_lap_sec = None
-
-        def format_fastest(row):
-            lap = row.get('FASTEST_LAP', None)
-            driver = row.get('FASTEST_DRIVER', None)
-            if pd.isna(lap) or lap is None:
-                return ""
-            lap_sec = to_seconds(lap)
-            formatted = f"{lap} ({driver})" if driver else f"{lap}"
-            if best_lap_sec and lap_sec == best_lap_sec:
-                return f"**{formatted}**"
-            return formatted
-
-        class_cars['Fastest Lap'] = class_cars.apply(format_fastest, axis=1)
-
-        # Format elapsed time
-        def format_time(seconds):
-            if pd.isna(seconds):
-                return ""
-            m, s = divmod(seconds, 60)
-            h, m = divmod(m, 60)
-            if h >= 1:
-                return f"{int(h)}:{int(m):02d}:{s:06.3f}"
+            if lap_diff_leader > 0:
+                gaps_to_leader.append(f"{int(lap_diff_leader)} lap")
             else:
-                return f"{int(m)}:{s:06.3f}"
+                diff_leader = row["ELAPSED_SECONDS"] - leader_time
+                gaps_to_leader.append(f"{diff_leader:.3f}s")
 
-        class_cars['Total Time'] = class_cars['ELAPSED_SECONDS'].apply(format_time)
+        last_lap_times["Interval"] = intervals
+        last_lap_times["Gap to Leader"] = gaps_to_leader
 
-        # Build display columns list, but only keep those that exist
-        desired_cols = [
-            'Position', 'NUMBER', 'TEAM', 'DRIVERS', 'LAP_NUMBER',
-            'Interval', 'Gap to Leader', 'Fastest Lap', 'Total Time'
+        # Add combined driver names per car
+        driver_names = (
+            class_subset.groupby("NUMBER")["DRIVER"]
+            .unique()
+            .apply(lambda x: " / ".join(x))
+            .reset_index()
+        )
+        last_lap_times = last_lap_times.merge(driver_names, on="NUMBER", how="left")
+
+        # Clean up display DataFrame
+        display_cols = [
+            "Position",
+            "NUMBER",
+            "TEAM",
+            "DRIVER",
+            "Interval",
+            "Gap to Leader",
+            "Fastest Lap",
         ]
-        available_cols = [c for c in desired_cols if c in class_cars.columns]
+        class_cars = last_lap_times[display_cols].rename(columns={"DRIVER": "Drivers"})
 
-        # Rename DRIVERS -> DRIVER for display if you prefer a different label
-        # we'll present it as DRIVER to match prior expectations
-        if 'DRIVERS' in available_cols:
-            class_cars = class_cars.rename(columns={'DRIVERS': 'DRIVER'})
+        # Highlight class-best fastest lap
+        min_fastest = last_lap_times["Fastest Lap Time"].min()
+        class_cars["Fastest Lap"] = class_cars.apply(
+            lambda x: f"**{x['Fastest Lap']}**"
+            if pd.notna(x["Fastest Lap"]) and x["Fastest Lap Time"] == min_fastest
+            else x["Fastest Lap"],
+            axis=1,
+        )
 
-            # adjust available_cols list
-            available_cols = [ 'Position' if c=='Position' else ('DRIVER' if c=='DRIVERS' else c) for c in desired_cols ]
-            # filter to those actually present
-            available_cols = [c for c in available_cols if c in class_cars.columns]
+        # Convert mixed-type columns to strings to avoid Arrow conversion issues
+        class_cars["Gap to Leader"] = class_cars["Gap to Leader"].astype(str)
+        class_cars["Interval"] = class_cars["Interval"].astype(str)
 
-        st.dataframe(class_cars[available_cols], use_container_width=True, hide+index=True)
+        # Display table
+        st.dataframe(class_cars, width="stretch", hide_index=True)

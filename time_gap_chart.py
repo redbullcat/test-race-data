@@ -123,12 +123,26 @@ def show_time_gap_chart_debug(df, team_colors):
         how="left"
     )
 
+    # --- Count pitstops per car ---
+    pitstops_count = (
+        class_df[class_df["CROSSING_FINISH_LINE_IN_PIT"] == "B"]
+        .groupby("NUMBER")
+        .size()
+        .rename("Pitstops")
+    )
+
+    # Merge pitstops count into last_lap_times
+    last_lap_times = last_lap_times.merge(pitstops_count, on="NUMBER", how="left")
+
+    # Fill NaN pitstops with 0 (cars with no pit stops)
+    last_lap_times["Pitstops"] = last_lap_times["Pitstops"].fillna(0).astype(int)
+
     # Identify class fastest lap
     fastest_class_lap_time = fastest_laps["LAP_TIME_SECONDS"].min()
 
-    # --- Reorder columns ---
+    # --- Reorder columns including new Pitstops column after Fastest Lap ---
     display_df = last_lap_times[
-        ["NUMBER", "TEAM", "DRIVERS", "LAP_NUMBER", "ELAPSED", "interval", "Gap to leader (s)", "FASTEST_LAP_FORMATTED"]
+        ["NUMBER", "TEAM", "DRIVERS", "LAP_NUMBER", "ELAPSED", "interval", "Gap to leader (s)", "FASTEST_LAP_FORMATTED", "Pitstops"]
     ].rename(columns={"FASTEST_LAP_FORMATTED": "Fastest Lap"})
 
     # Add Position column starting from 1

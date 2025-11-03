@@ -80,19 +80,27 @@ def show_time_gap_chart_debug(df, team_colors):
         by=["LAP_NUMBER", "ELAPSED_SECONDS"], ascending=[False, True]
     ).reset_index(drop=True)
 
-    # Leader info
+    # Leader info for gap to leader calculation only
     leader_lap = last_lap_times.loc[0, "LAP_NUMBER"]
     leader_time = last_lap_times.loc[0, "ELAPSED_SECONDS"]
 
-    # --- Interval and Gap to Leader calculations ---
-    def calculate_interval(row):
-        laps_down = leader_lap - row["LAP_NUMBER"]
-        if laps_down >= 1:
-            return f"{int(laps_down)} lap{'s' if laps_down > 1 else ''}"
+    # --- Interval calculation changed: gap to previous car ---
+    intervals = []
+    for i, row in last_lap_times.iterrows():
+        if i == 0:
+            intervals.append("-")  # leader has no interval gap
         else:
-            gap = row["ELAPSED_SECONDS"] - leader_time
-            return f"{gap:.3f} s"
+            prev = last_lap_times.iloc[i - 1]
+            laps_down = prev["LAP_NUMBER"] - row["LAP_NUMBER"]
+            if laps_down >= 1:
+                intervals.append(f"{int(laps_down)} lap{'s' if laps_down > 1 else ''}")
+            else:
+                gap = row["ELAPSED_SECONDS"] - prev["ELAPSED_SECONDS"]
+                intervals.append(f"{gap:.3f} s")
 
+    last_lap_times["interval"] = intervals
+
+    # --- Gap to leader remains as before ---
     def calculate_gap_to_leader(row):
         laps_down = leader_lap - row["LAP_NUMBER"]
         if laps_down >= 1:
@@ -100,7 +108,6 @@ def show_time_gap_chart_debug(df, team_colors):
         else:
             return row["ELAPSED_SECONDS"] - leader_time
 
-    last_lap_times["interval"] = last_lap_times.apply(calculate_interval, axis=1)
     last_lap_times["Gap to leader (s)"] = last_lap_times.apply(calculate_gap_to_leader, axis=1)
 
     # --- Fastest Lap per car ---

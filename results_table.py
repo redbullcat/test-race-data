@@ -80,15 +80,15 @@ def show_results_table(df, team_colors):
         by=["LAP_NUMBER", "ELAPSED_SECONDS"], ascending=[False, True]
     ).reset_index(drop=True)
 
-    # Leader info for gap to leader calculation only
+    # Leader info for gap calculations
     leader_lap = last_lap_times.loc[0, "LAP_NUMBER"]
     leader_time = last_lap_times.loc[0, "ELAPSED_SECONDS"]
 
-    # --- Interval calculation changed: gap to previous car ---
+    # --- Interval calculation (gap to previous car) ---
     intervals = []
     for i, row in last_lap_times.iterrows():
         if i == 0:
-            intervals.append("-")  # leader has no interval gap
+            intervals.append("-")  # leader interval
         else:
             prev = last_lap_times.iloc[i - 1]
             laps_down = prev["LAP_NUMBER"] - row["LAP_NUMBER"]
@@ -100,13 +100,14 @@ def show_results_table(df, team_colors):
 
     last_lap_times["interval"] = intervals
 
-    # --- Gap to leader remains as before ---
+    # --- Updated Gap to leader with formatting and laps down ---
     def calculate_gap_to_leader(row):
         laps_down = leader_lap - row["LAP_NUMBER"]
         if laps_down >= 1:
-            return None
+            return f"{int(laps_down)} lap{'s' if laps_down > 1 else ''} down"
         else:
-            return row["ELAPSED_SECONDS"] - leader_time
+            gap = row["ELAPSED_SECONDS"] - leader_time
+            return ('{:.3f}'.format(gap)).rstrip('0').rstrip('.')
 
     last_lap_times["Gap to leader (s)"] = last_lap_times.apply(calculate_gap_to_leader, axis=1)
 

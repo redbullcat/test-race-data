@@ -132,5 +132,6 @@ def show_results_tables(df, team_colors):
             'NUMBER', 'TEAM', 'DRIVER_NAME', 'LAP_NUMBER',
             'Interval', 'Gap to Leader', 'Fastest Lap', 'Total Time'
         ]
-
+        
+        st.write("Columns before display:", list(class_cars.columns))
         st.dataframe(class_cars[display_cols], use_container_width=True)

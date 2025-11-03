@@ -29,7 +29,7 @@ def show_results_tables(df, team_colors):
         if len(car_df) == 0:
             return pd.Series({"Fastest Lap": None})
         best_row = car_df.loc[car_df["LAP_TIME_S"].idxmin()]
-        formatted = f"{best_row['LAP_TIME']} ({best_row['DRIVER']})"
+        formatted = f"{best_row['LAP_TIME']} ({best_row['DRIVER_NAME']})"
         return pd.Series({"Fastest Lap": formatted, "Fastest Lap Time": best_row["LAP_TIME_S"]})
 
     # --- Precompute fastest laps for all cars ---
@@ -94,7 +94,7 @@ def show_results_tables(df, team_colors):
 
         # Add combined driver names per car
         driver_names = (
-            class_subset.groupby("NUMBER")["DRIVER"]
+            class_subset.groupby("NUMBER")["DRIVER_NAME"]
             .unique()
             .apply(lambda x: " / ".join(x))
             .reset_index()
@@ -106,18 +106,19 @@ def show_results_tables(df, team_colors):
             "Position",
             "NUMBER",
             "TEAM",
-            "DRIVER",
+            "DRIVER_NAME",
             "Interval",
             "Gap to Leader",
             "Fastest Lap",
         ]
-        class_cars = last_lap_times[display_cols].rename(columns={"DRIVER": "Drivers"})
+        class_cars = last_lap_times[display_cols].rename(columns={"DRIVER_NAME": "Drivers"})
 
         # Highlight class-best fastest lap
         min_fastest = last_lap_times["Fastest Lap Time"].min()
         class_cars["Fastest Lap"] = class_cars.apply(
             lambda x: f"**{x['Fastest Lap']}**"
-            if pd.notna(x["Fastest Lap"]) and x["Fastest Lap Time"] == min_fastest
+            if pd.notna(x["Fastest Lap"])
+            and last_lap_times.loc[last_lap_times["NUMBER"] == x["NUMBER"], "Fastest Lap Time"].iloc[0] == min_fastest
             else x["Fastest Lap"],
             axis=1,
         )

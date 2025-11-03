@@ -66,8 +66,8 @@ def show_time_gap_chart_debug(df, team_colors):
     # Added include_group=False to avoid FutureWarning
     last_lap_times = (
         class_df.groupby("NUMBER")
-        .apply(lambda x: x.loc[x["LAP_NUMBER"].idxmax()], include_group=False)
-        .reset_index(drop=True)
+        .apply(lambda x: x.loc[x["LAP_NUMBER"].idxmax()])
+    .reset_index(drop=True)
     )
 
     # Add driver names

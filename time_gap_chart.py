@@ -142,4 +142,4 @@ def show_time_gap_chart_debug(df, team_colors):
         return ""
 
     st.markdown(f"### All Cars in Class '{selected_class}' Ordered by Laps, Gaps, and Fastest Laps")
-    st.dataframe(display_df.style.map(style_func, subset=pd.IndexSlice[:, :]), width='stretch')
+    st.dataframe(display_df.style.map(style_func, subset=pd.IndexSlice[:, :]), width='stretch', index=False)

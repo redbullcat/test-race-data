@@ -131,12 +131,10 @@ def show_time_gap_chart_debug(df, team_colors):
         ["NUMBER", "TEAM", "DRIVERS", "LAP_NUMBER", "ELAPSED", "interval", "Gap to leader (s)", "FASTEST_LAP_FORMATTED"]
     ].rename(columns={"FASTEST_LAP_FORMATTED": "Fastest Lap"})
 
-    # --- Highlight absolute fastest lap in class ---
-    def highlight_fastest(val):
-        if isinstance(val, str) and str(fastest_class_lap_time) in val:
-            return "font-weight: bold"
-        return ""
+    # Add Position column starting from 1
+    display_df.insert(0, "Position", range(1, len(display_df) + 1))
 
+    # --- Highlight absolute fastest lap in class ---
     st.markdown(f"### All Cars in Class '{selected_class}' Ordered by Laps, Gaps, and Fastest Laps")
     st.dataframe(display_df.style.applymap(
         lambda v: "font-weight: bold; color: #00FFAA;" if isinstance(v, str) and "(" in v and str(fastest_class_lap_time) in v else ""

@@ -40,7 +40,7 @@ def show_results_tables(df, team_colors):
         if valid.empty:
             return None, None
         best_row = valid.loc[valid['LAP_TIME'].astype(str).apply(to_seconds).idxmin()]
-        return best_row['LAP_TIME'], best_row['DRIVER']
+        return best_row['LAP_TIME'], best_row['DRIVER_NAME']
 
     car_fastest = df.groupby('NUMBER').apply(get_fastest_lap).reset_index()
     car_fastest.columns = ['NUMBER', 'FastestData']
@@ -85,9 +85,9 @@ def show_results_tables(df, team_colors):
         class_cars['Gap to Leader'] = gaps
 
         # Combine drivers list into a single column (if multiple drivers)
-        if 'DRIVER' in df.columns:
+        if 'DRIVER_NAME' in df.columns:
             drivers_by_car = (
-                df.groupby('NUMBER')['DRIVER']
+                df.groupby('NUMBER')['DRIVER_NAME']
                 .unique()
                 .apply(lambda d: " / ".join(map(str, d)))
                 .reset_index()
@@ -129,7 +129,7 @@ def show_results_tables(df, team_colors):
         class_cars['Total Time'] = class_cars['ELAPSED_SECONDS'].apply(format_time)
 
         display_cols = [
-            'NUMBER', 'TEAM', 'DRIVER', 'LAP_NUMBER',
+            'NUMBER', 'TEAM', 'DRIVER_NAME', 'LAP_NUMBER',
             'Interval', 'Gap to Leader', 'Fastest Lap', 'Total Time'
         ]
 

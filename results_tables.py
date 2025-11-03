@@ -53,6 +53,15 @@ def show_results_tables(df, team_colors):
         # Merge fastest lap info
         last_lap_times = last_lap_times.merge(car_fastest, on="NUMBER", how="left")
 
+        # Add combined driver names per car
+        driver_names = (
+            class_subset.groupby("NUMBER")["DRIVER_NAME"]
+            .unique()
+            .apply(lambda x: " / ".join(x))
+            .reset_index()
+        )
+        last_lap_times = last_lap_times.merge(driver_names, on="NUMBER", how="left")
+
         # Sort: first by LAP_NUMBER desc (more laps = ahead), then by ELAPSED_SECONDS asc
         last_lap_times = last_lap_times.sort_values(
             by=["LAP_NUMBER", "ELAPSED_SECONDS"], ascending=[False, True]
@@ -92,16 +101,9 @@ def show_results_tables(df, team_colors):
         last_lap_times["Interval"] = intervals
         last_lap_times["Gap to Leader"] = gaps_to_leader
 
-        # Add combined driver names per car
-        driver_names = (
-            class_subset.groupby("NUMBER")["DRIVER_NAME"]
-            .unique()
-            .apply(lambda x: " / ".join(x))
-            .reset_index()
-        )
-        last_lap_times = last_lap_times.merge(driver_names, on="NUMBER", how="left")
+        # === DEBUG: Print columns to check before subsetting ===
+        st.write("Columns in last_lap_times BEFORE selecting display columns:", last_lap_times.columns.tolist())
 
-        # Clean up display DataFrame
         display_cols = [
             "Position",
             "NUMBER",
@@ -111,6 +113,16 @@ def show_results_tables(df, team_colors):
             "Gap to Leader",
             "Fastest Lap",
         ]
+
+        # Check for missing columns
+        missing_cols = [col for col in display_cols if col not in last_lap_times.columns]
+        if missing_cols:
+            st.error(f"Missing columns in last_lap_times: {missing_cols}")
+
+        # Convert mixed-type columns to strings to avoid Arrow conversion issues
+        last_lap_times["Gap to Leader"] = last_lap_times["Gap to Leader"].astype(str)
+        last_lap_times["Interval"] = last_lap_times["Interval"].astype(str)
+
         class_cars = last_lap_times[display_cols].rename(columns={"DRIVER_NAME": "Drivers"})
 
         # Highlight class-best fastest lap
@@ -122,10 +134,6 @@ def show_results_tables(df, team_colors):
             else x["Fastest Lap"],
             axis=1,
         )
-
-        # Convert mixed-type columns to strings to avoid Arrow conversion issues
-        class_cars["Gap to Leader"] = class_cars["Gap to Leader"].astype(str)
-        class_cars["Interval"] = class_cars["Interval"].astype(str)
 
         # Display table
         st.dataframe(class_cars, width="stretch", hide_index=True)

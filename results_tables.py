@@ -161,4 +161,4 @@ def show_results_tables(df, team_colors):
             # filter to those actually present
             available_cols = [c for c in available_cols if c in class_cars.columns]
 
-        st.dataframe(class_cars[available_cols], use_container_width=True)
+        st.dataframe(class_cars[available_cols], use_container_width=True, hide+index=True)

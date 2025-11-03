@@ -39,15 +39,16 @@ def show_results_tables(df, team_colors):
         valid = group.dropna(subset=['LAP_TIME'])
         if valid.empty:
             return None, None
+        valid = valid.copy()
         valid['LAP_TIME_SEC'] = valid['LAP_TIME'].astype(str).apply(to_seconds)
         best_row = valid.loc[valid['LAP_TIME_SEC'].idxmin()]
-        return best_row['LAP_TIME'], best_row['DRIVER_NAME']
+        # DRIVER_NAME expected in your data
+        driver_col = 'DRIVER_NAME' if 'DRIVER_NAME' in best_row.index else ('DRIVER' if 'DRIVER' in best_row.index else None)
+        return best_row['LAP_TIME'], best_row[driver_col] if driver_col else None
 
     car_fastest = df.groupby('NUMBER').apply(get_fastest_lap).reset_index()
     car_fastest.columns = ['NUMBER', 'FastestData']
-    car_fastest[['FASTEST_LAP', 'FASTEST_DRIVER']] = pd.DataFrame(
-        car_fastest['FastestData'].tolist(), index=car_fastest.index
-    )
+    car_fastest[['FASTEST_LAP', 'FASTEST_DRIVER']] = pd.DataFrame(car_fastest['FastestData'].tolist(), index=car_fastest.index)
     car_fastest.drop(columns=['FastestData'], inplace=True)
 
     last_lap = last_lap.merge(car_fastest, on='NUMBER', how='left')
@@ -91,14 +92,23 @@ def show_results_tables(df, team_colors):
         class_cars['Gap to Leader'] = gaps
 
         # Combine drivers list into a single column (if multiple drivers)
+        driver_col_name = None
         if 'DRIVER_NAME' in df.columns:
+            driver_col_name = 'DRIVER_NAME'
+        elif 'DRIVER' in df.columns:
+            driver_col_name = 'DRIVER'
+
+        if driver_col_name:
             drivers_by_car = (
-                df.groupby('NUMBER')['DRIVER_NAME']
+                df.groupby('NUMBER')[driver_col_name]
                 .unique()
                 .apply(lambda d: " / ".join(map(str, d)))
                 .reset_index()
+                .rename(columns={driver_col_name: 'DRIVERS'})
             )
             class_cars = class_cars.merge(drivers_by_car, on='NUMBER', how='left')
+        else:
+            class_cars['DRIVERS'] = None
 
         # Identify fastest lap in class
         all_fastest = df[df['CLASS'] == race_class].copy()
@@ -109,12 +119,12 @@ def show_results_tables(df, team_colors):
             best_lap_sec = None
 
         def format_fastest(row):
-            lap = row['FASTEST_LAP']
-            driver = row['FASTEST_DRIVER']
-            if pd.isna(lap):
+            lap = row.get('FASTEST_LAP', None)
+            driver = row.get('FASTEST_DRIVER', None)
+            if pd.isna(lap) or lap is None:
                 return ""
             lap_sec = to_seconds(lap)
-            formatted = f"{lap} ({driver})"
+            formatted = f"{lap} ({driver})" if driver else f"{lap}"
             if best_lap_sec and lap_sec == best_lap_sec:
                 return f"**{formatted}**"
             return formatted
@@ -134,9 +144,21 @@ def show_results_tables(df, team_colors):
 
         class_cars['Total Time'] = class_cars['ELAPSED_SECONDS'].apply(format_time)
 
-        display_cols = [
-            'Position', 'NUMBER', 'TEAM', 'DRIVER_NAME', 'LAP_NUMBER',
+        # Build display columns list, but only keep those that exist
+        desired_cols = [
+            'Position', 'NUMBER', 'TEAM', 'DRIVERS', 'LAP_NUMBER',
             'Interval', 'Gap to Leader', 'Fastest Lap', 'Total Time'
         ]
+        available_cols = [c for c in desired_cols if c in class_cars.columns]
 
-        st.dataframe(class_cars[display_cols], use_container_width=True)
+        # Rename DRIVERS -> DRIVER for display if you prefer a different label
+        # we'll present it as DRIVER to match prior expectations
+        if 'DRIVERS' in available_cols:
+            class_cars = class_cars.rename(columns={'DRIVERS': 'DRIVER'})
+
+            # adjust available_cols list
+            available_cols = [ 'Position' if c=='Position' else ('DRIVER' if c=='DRIVERS' else c) for c in desired_cols ]
+            # filter to those actually present
+            available_cols = [c for c in available_cols if c in class_cars.columns]
+
+        st.dataframe(class_cars[available_cols], use_container_width=True)

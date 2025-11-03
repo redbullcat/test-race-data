@@ -104,10 +104,10 @@ def show_results_table(df, team_colors):
     def calculate_gap_to_leader(row):
         laps_down = leader_lap - row["LAP_NUMBER"]
         if laps_down >= 1:
-            return f"{int(laps_down)} lap{'s' if laps_down > 1 else ''} down"
+            return f"{int(laps_down)} lap{'s' if laps_down > 1 else ''}"
         else:
             gap = row["ELAPSED_SECONDS"] - leader_time
-            return ('{:.3f}'.format(gap)).rstrip('0').rstrip('.')
+            return f"{gap:.3f}"
 
     last_lap_times["Gap to leader (s)"] = last_lap_times.apply(calculate_gap_to_leader, axis=1)
 

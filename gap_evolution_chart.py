@@ -55,10 +55,26 @@ def show_gap_evolution_chart(df, team_colors):
 
     selected_df['LAP_TIME_SEC'] = selected_df['LAP_TIME'].apply(time_to_seconds)
 
-    # Compute cumulative time per car
+    # Ensure LAP_NUMBER is numeric and drop rows with missing laps or lap times
     selected_df = selected_df.dropna(subset=['LAP_TIME_SEC', 'LAP_NUMBER'])
     selected_df['LAP_NUMBER'] = pd.to_numeric(selected_df['LAP_NUMBER'], errors='coerce')
 
+    # Lap range filter slider
+    min_lap = int(selected_df['LAP_NUMBER'].min())
+    max_lap = int(selected_df['LAP_NUMBER'].max())
+    lap_range = st.slider(
+        "Select lap range to display",
+        min_value=min_lap,
+        max_value=max_lap,
+        value=(min_lap, max_lap)
+    )
+
+    # Filter selected_df by lap range
+    selected_df = selected_df[
+        (selected_df['LAP_NUMBER'] >= lap_range[0]) & (selected_df['LAP_NUMBER'] <= lap_range[1])
+    ]
+
+    # Compute cumulative time per car
     selected_df['CUM_TIME'] = selected_df.groupby('NUMBER')['LAP_TIME_SEC'].cumsum()
 
     # Find fastest finisher (lowest final cumulative time)

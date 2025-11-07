@@ -10,29 +10,15 @@ def show_lap_position_chart(df, selected_cars, selected_classes, team_colors):
         st.warning("No classes selected for lap position chart.")
         return
 
-    tabs = st.tabs(classes)
+    st.subheader("Lap-by-Lap Position Chart")
 
-        # 🔹 Add lap range slider (applies globally across all classes)
-    min_lap = int(df["LAP_NUMBER"].min())
-    max_lap = int(df["LAP_NUMBER"].max())
-    selected_laps = st.slider(
-        "Select Lap Range",
-        min_value=min_lap,
-        max_value=max_lap,
-        value=(min_lap, max_lap),
-        step=1
-    )
+    tabs = st.tabs(classes)
 
     for tab, cls in zip(tabs, classes):
         with tab:
-            st.subheader(f"Lap-by-Lap Position Chart for {cls}")
+            st.markdown(f"### {cls}")
 
-            # Filter by class and lap range
             class_df = df[df['CLASS'] == cls]
-            class_df = class_df[
-                (class_df["LAP_NUMBER"] >= selected_laps[0]) &
-                (class_df["LAP_NUMBER"] <= selected_laps[1])
-            ]
 
             # Filter selected cars for this class
             class_cars = [car for car in selected_cars if car in class_df['NUMBER'].unique()]
@@ -43,10 +29,22 @@ def show_lap_position_chart(df, selected_cars, selected_classes, team_colors):
             max_lap = class_df["LAP_NUMBER"].max()
             max_position = class_df.groupby("LAP_NUMBER")["NUMBER"].nunique().max()
 
-            # Prepare lap positions dict: keys = lap names, values = lists of cars by position
-            lap_positions = {f'Lap {i}': [None] * max_position for i in range(selected_laps[0], max_lap + 1)}
+            # Lap range slider
+            lap_range = st.slider(
+                f"Select lap range for {cls}",
+                min_value=1,
+                max_value=int(max_lap),
+                value=(1, int(max_lap)),
+                step=1,
+                key=f"lap_range_{cls}"
+            )
 
-            for lap in range(selected_laps[0], max_lap + 1):
+            start_lap, end_lap = lap_range
+
+            # Prepare lap positions dict for selected range
+            lap_positions = {f'Lap {i}': [None] * max_position for i in range(start_lap, end_lap + 1)}
+
+            for lap in range(start_lap, end_lap + 1):
                 lap_df = class_df[class_df['LAP_NUMBER'] == lap].sort_values("ELAPSED").reset_index(drop=True)
                 unique_cars_in_lap = lap_df["NUMBER"].unique()
                 for pos, car_number in enumerate(unique_cars_in_lap, start=1):
@@ -74,9 +72,9 @@ def show_lap_position_chart(df, selected_cars, selected_classes, team_colors):
             for car_number in class_cars:
                 positions = []
                 laps = []
-                for lap in range(selected_laps[0], max_lap + 1):
+                for lap in range(start_lap, end_lap + 1):
                     col = f'Lap {lap}'
-                    if col in position_df.columns and car_number in position_df[col].values:
+                    if car_number in position_df[col].values:
                         pos = position_df.index[position_df[col] == car_number][0]
                         positions.append(pos)
                         laps.append(lap)

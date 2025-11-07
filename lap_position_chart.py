@@ -10,7 +10,9 @@ def show_lap_position_chart(df, selected_cars, selected_classes, team_colors):
         st.warning("No classes selected for lap position chart.")
         return
 
-    # 🔹 Add lap range slider (applies globally across all classes)
+    tabs = st.tabs(classes)
+
+        # 🔹 Add lap range slider (applies globally across all classes)
     min_lap = int(df["LAP_NUMBER"].min())
     max_lap = int(df["LAP_NUMBER"].max())
     selected_laps = st.slider(
@@ -20,8 +22,6 @@ def show_lap_position_chart(df, selected_cars, selected_classes, team_colors):
         value=(min_lap, max_lap),
         step=1
     )
-
-    tabs = st.tabs(classes)
 
     for tab, cls in zip(tabs, classes):
         with tab:

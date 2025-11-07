@@ -2,16 +2,53 @@ import plotly.express as px
 import pandas as pd
 import streamlit as st
 
-def show_pace_chart(df, selected_cars, top_percent, selected_classes, team_colors):
+def show_pace_chart(df, team_colors):
+    st.subheader("Average Race Pace by Car")
 
-    # Apply class filter
-    if selected_classes and "CLASS" in df.columns:
-        df = df[df["CLASS"].isin(selected_classes)]
+    # ----------------------------
+    # Independent filters
+    # ----------------------------
+    classes = df["CLASS"].dropna().unique().tolist()
+    selected_classes = st.multiselect(
+        "Select Class(es):",
+        options=classes,
+        default=classes,
+        key="pace_chart_class_filter"
+    )
 
-    # Apply car filter
-    if selected_cars and "NUMBER" in df.columns:
-        df = df[df["NUMBER"].isin(selected_cars)]
+    filtered_df = df[df["CLASS"].isin(selected_classes)]
 
+    available_cars = sorted(filtered_df["NUMBER"].unique().tolist())
+    selected_cars = st.multiselect(
+        "Select Car(s):",
+        options=available_cars,
+        default=available_cars,
+        key="pace_chart_car_filter"
+    )
+
+    top_percent = st.slider(
+        "Select Top Lap Percentage:",
+        0,
+        100,
+        100,
+        step=20,
+        key="pace_chart_top_lap_filter",
+        help="Use 0% to hide all data."
+    )
+
+    if top_percent == 0:
+        st.warning("You selected 0%. You won't see any data.")
+        return
+
+    # ----------------------------
+    # Apply filters
+    # ----------------------------
+    df = df[df["CLASS"].isin(selected_classes)]
+    df = df[df["NUMBER"].isin(selected_cars)]
+
+    # ----------------------------
+    # Lap time conversion
+    # ----------------------------
     def lap_to_seconds(x):
         try:
             mins, secs = x.split(":")
@@ -22,6 +59,9 @@ def show_pace_chart(df, selected_cars, top_percent, selected_classes, team_color
     df["LAP_TIME_SECONDS"] = df["LAP_TIME"].apply(lap_to_seconds)
     df = df.dropna(subset=["LAP_TIME_SECONDS"])
 
+    # ----------------------------
+    # Keep top X% laps
+    # ----------------------------
     def filter_top_percent_laps(df, percent):
         filtered_dfs = []
         for car_number, group in df.groupby("NUMBER"):
@@ -39,6 +79,9 @@ def show_pace_chart(df, selected_cars, top_percent, selected_classes, team_color
         .sort_values("LAP_TIME_SECONDS", ascending=True)
     )
 
+    # ----------------------------
+    # Colour mapping
+    # ----------------------------
     def get_team_color(team):
         for key, color in team_colors.items():
             if key.lower() in team.lower():
@@ -48,6 +91,9 @@ def show_pace_chart(df, selected_cars, top_percent, selected_classes, team_color
     avg_df["color"] = avg_df["TEAM"].apply(get_team_color)
     avg_df["Label"] = avg_df["NUMBER"] + " — " + avg_df["TEAM"]
 
+    # ----------------------------
+    # Plotly figure
+    # ----------------------------
     fig = px.bar(
         avg_df,
         y="Label",

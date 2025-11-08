@@ -48,14 +48,27 @@ df["NUMBER"] = df.apply(
 # Convert NUMBER column to string for consistency
 df["NUMBER"] = df["NUMBER"].astype(str)
 
+# --- Apply global filters checkbox ---
+apply_global_filters = st.sidebar.checkbox("Apply global filters", value=True)
+
 # --- Sidebar Filters ---
 st.sidebar.header("Filters")
 
 available_classes = df["CLASS"].dropna().unique().tolist()
-selected_classes = st.sidebar.multiselect("Select Classes", available_classes, default=available_classes)
+selected_classes = st.sidebar.multiselect(
+    "Select Classes", 
+    available_classes, 
+    default=available_classes,
+    disabled=not apply_global_filters
+)
 
 available_cars = df["NUMBER"].unique().tolist()
-selected_cars = st.sidebar.multiselect("Select Cars", available_cars, default=available_cars)
+selected_cars = st.sidebar.multiselect(
+    "Select Cars", 
+    available_cars, 
+    default=available_cars,
+    disabled=not apply_global_filters
+)
 
 top_percent = st.sidebar.slider(
     "Select Top Lap Percentage",
@@ -63,7 +76,8 @@ top_percent = st.sidebar.slider(
     100,
     100,
     step=20,
-    help="Use 0% to hide all data."
+    help="Use 0% to hide all data.",
+    disabled=not apply_global_filters
 )
 
 if top_percent == 0:
@@ -95,9 +109,15 @@ team_colors = {
 # --- Show charts ---
 st.header(f"{selected_year} {selected_race} Analysis")
 
-show_pace_chart(df, team_colors)
+if apply_global_filters:
+    show_pace_chart(df, selected_cars, top_percent, selected_classes, team_colors)
+    show_driver_pace_chart(df, selected_cars, top_percent, selected_classes, team_colors)
+else:
+    show_pace_chart(df, team_colors)
+    show_driver_pace_chart(df, team_colors)
+
+# These charts use internal filters, so just call normally
 show_lap_position_chart(df, team_colors)
-show_driver_pace_chart(df, team_colors)
 show_driver_pace_comparison(df, team_colors)
 show_results_table(df, team_colors)
 show_gap_evolution_chart(df, team_colors)

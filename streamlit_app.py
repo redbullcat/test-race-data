@@ -49,7 +49,7 @@ df["NUMBER"] = df.apply(
 df["NUMBER"] = df["NUMBER"].astype(str)
 
 # --- Apply global filters checkbox ---
-apply_global_filters = st.sidebar.checkbox("Apply global filters", value=True)
+apply_global_filters = st.sidebar.checkbox("Apply global filters", value=False)
 
 # --- Sidebar Filters ---
 st.sidebar.header("Filters")

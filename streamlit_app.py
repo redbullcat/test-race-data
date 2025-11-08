@@ -103,14 +103,14 @@ if apply_global_filters:
     show_pace_chart(df, selected_cars, top_percent, selected_classes, team_colors)
     show_lap_position_chart(df, selected_cars, selected_classes, team_colors)
     show_driver_pace_chart(df, selected_cars, top_percent, selected_classes, team_colors)
-    show_driver_pace_comparison(df, selected_cars, selected_classes, top_percent, team_colors)
+    show_driver_pace_comparison(df, selected_cars, top_percent, selected_classes, team_colors)
     show_gap_evolution_chart(df, selected_cars, selected_classes, team_colors)
 else:
     # Use empty/default filters so charts show their own internal filters
     show_pace_chart(df, [], 100, [], team_colors)
     show_lap_position_chart(df, [], [], team_colors)
     show_driver_pace_chart(df, [], 100, [], team_colors)
-    show_driver_pace_comparison(df, [], [], 100, team_colors)
+    show_driver_pace_comparison(df, [], 100, [], team_colors)
     show_gap_evolution_chart(df, [], [], team_colors)
 
 # results_table does not use global filters

@@ -2,37 +2,41 @@ import plotly.graph_objects as go
 import pandas as pd
 import streamlit as st
 
-def show_lap_position_chart(df, selected_cars, selected_classes, team_colors):
-    classes = df['CLASS'].unique()
+def show_lap_position_chart(df, team_colors):
+    # --- Independent Class selector ---
+    available_classes = sorted(df['CLASS'].dropna().unique())
+    if not available_classes:
+        st.warning("No classes available in data for lap position chart.")
+        return
 
-    # Only filter if selected_classes is non-empty
-    if selected_classes:
-        classes = [cls for cls in classes if cls in selected_classes]
-
-    if not classes:
+    selected_classes = st.multiselect("Select Class for Lap Position Chart", available_classes, default=available_classes)
+    if not selected_classes:
         st.warning("No classes selected for lap position chart.")
         return
 
     st.subheader("Lap-by-Lap Position Chart")
 
-    tabs = st.tabs(classes)
+    tabs = st.tabs(selected_classes)
 
-    for tab, cls in zip(tabs, classes):
+    for tab, cls in zip(tabs, selected_classes):
         with tab:
             st.markdown(f"### {cls}")
 
             class_df = df[df['CLASS'] == cls]
 
-            # Filter selected cars for this class
-            class_cars = [car for car in selected_cars if car in class_df['NUMBER'].unique()]
-            if not class_cars:
+            # --- Independent Car selector for this class ---
+            available_cars = sorted(class_df['NUMBER'].unique())
+            selected_cars = st.multiselect(f"Select Cars for {cls}", available_cars, default=available_cars, key=f"cars_{cls}")
+            if not selected_cars:
                 st.write(f"No cars selected for class {cls}.")
                 continue
 
             max_lap = class_df["LAP_NUMBER"].max()
-            max_position = class_df.groupby("LAP_NUMBER")["NUMBER"].nunique().max()
+            if pd.isna(max_lap) or max_lap < 1:
+                st.write(f"No lap data for class {cls}.")
+                continue
 
-            # Lap range slider
+            # --- Lap range slider ---
             lap_range = st.slider(
                 f"Select lap range for {cls}",
                 min_value=1,
@@ -45,6 +49,10 @@ def show_lap_position_chart(df, selected_cars, selected_classes, team_colors):
             start_lap, end_lap = lap_range
 
             # Prepare lap positions dict for selected range
+            # Max position for any lap in range:
+            max_position = class_df[class_df['LAP_NUMBER'].between(start_lap, end_lap)]\
+                .groupby("LAP_NUMBER")["NUMBER"].nunique().max()
+
             lap_positions = {f'Lap {i}': [None] * max_position for i in range(start_lap, end_lap + 1)}
 
             for lap in range(start_lap, end_lap + 1):
@@ -72,7 +80,7 @@ def show_lap_position_chart(df, selected_cars, selected_classes, team_colors):
 
             fig_lap = go.Figure()
 
-            for car_number in class_cars:
+            for car_number in selected_cars:
                 positions = []
                 laps = []
                 for lap in range(start_lap, end_lap + 1):
@@ -114,4 +122,4 @@ def show_lap_position_chart(df, selected_cars, selected_classes, team_colors):
                 hovermode="x unified",
             )
 
-            st.plotly_chart(fig_lap, use_container_width=True)
+            st.plotly_chart(fig_lap, width='stretch')

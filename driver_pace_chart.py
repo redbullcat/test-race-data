@@ -2,7 +2,42 @@ import plotly.express as px
 import pandas as pd
 import streamlit as st
 
-def show_driver_pace_chart(df, selected_cars, top_percent, selected_classes, team_colors):
+def show_driver_pace_chart(df, team_colors):
+    # --- Independent Class selector ---
+    available_classes = sorted(df['CLASS'].dropna().unique())
+    if not available_classes:
+        st.warning("No classes available in data for driver pace chart.")
+        return
+
+    selected_classes = st.multiselect("Select Class for Driver Pace Chart", available_classes, default=available_classes)
+    if not selected_classes:
+        st.warning("No classes selected for driver pace chart.")
+        return
+
+    # Filter df by selected classes
+    class_df = df[df['CLASS'].isin(selected_classes)]
+
+    # --- Independent Car selector ---
+    available_cars = sorted(class_df['NUMBER'].unique())
+    selected_cars = st.multiselect("Select Cars for Driver Pace Chart", available_cars, default=available_cars)
+    if not selected_cars:
+        st.warning("No cars selected for driver pace chart.")
+        return
+
+    # --- Top percent slider ---
+    top_percent = st.slider(
+        "Select Top Lap Percentage (per driver)",
+        0,
+        100,
+        100,
+        step=5,
+        help="Filter top percentage of fastest laps per driver."
+    )
+    if top_percent == 0:
+        st.warning("You selected 0%. No data will be displayed.")
+
+    # Filter df by selected cars
+    filtered_df = class_df[class_df["NUMBER"].isin(selected_cars)]
 
     def lap_to_seconds(x):
         try:
@@ -11,13 +46,8 @@ def show_driver_pace_chart(df, selected_cars, top_percent, selected_classes, tea
         except:
             return None
 
-    df["LAP_TIME_SECONDS"] = df["LAP_TIME"].apply(lap_to_seconds)
-    df = df.dropna(subset=["LAP_TIME_SECONDS"])
-
-    # Apply filters for class and selected cars
-    df = df[df["CLASS"].isin(selected_classes)]
-    if selected_cars:
-        df = df[df["NUMBER"].isin(selected_cars)]
+    filtered_df["LAP_TIME_SECONDS"] = filtered_df["LAP_TIME"].apply(lap_to_seconds)
+    filtered_df = filtered_df.dropna(subset=["LAP_TIME_SECONDS"])
 
     # Filter top X% laps per driver (within each car)
     def filter_top_percent_laps(df, percent):
@@ -29,7 +59,7 @@ def show_driver_pace_chart(df, selected_cars, top_percent, selected_classes, tea
             filtered_dfs.append(group_sorted.head(n_keep))
         return pd.concat(filtered_dfs)
 
-    filtered_df = filter_top_percent_laps(df, top_percent)
+    filtered_df = filter_top_percent_laps(filtered_df, top_percent)
 
     # Compute average lap time per driver
     avg_df = (

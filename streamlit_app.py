@@ -48,27 +48,14 @@ df["NUMBER"] = df.apply(
 # Convert NUMBER column to string for consistency
 df["NUMBER"] = df["NUMBER"].astype(str)
 
-# --- Apply global filters checkbox ---
-apply_global_filters = st.sidebar.checkbox("Apply global filters", value=True)
-
 # --- Sidebar Filters ---
 st.sidebar.header("Filters")
 
 available_classes = df["CLASS"].dropna().unique().tolist()
-selected_classes = st.sidebar.multiselect(
-    "Select Classes", 
-    available_classes, 
-    default=available_classes,
-    disabled=not apply_global_filters
-)
+selected_classes = st.sidebar.multiselect("Select Classes", available_classes, default=available_classes)
 
 available_cars = df["NUMBER"].unique().tolist()
-selected_cars = st.sidebar.multiselect(
-    "Select Cars", 
-    available_cars, 
-    default=available_cars,
-    disabled=not apply_global_filters
-)
+selected_cars = st.sidebar.multiselect("Select Cars", available_cars, default=available_cars)
 
 top_percent = st.sidebar.slider(
     "Select Top Lap Percentage",
@@ -76,12 +63,14 @@ top_percent = st.sidebar.slider(
     100,
     100,
     step=20,
-    help="Use 0% to hide all data.",
-    disabled=not apply_global_filters
+    help="Use 0% to hide all data."
 )
 
 if top_percent == 0:
     st.warning("You selected 0%. You won't see any data.")
+
+# --- Apply global filters toggle ---
+apply_global_filters = st.sidebar.checkbox("Apply global filters", value=True)
 
 # --- Team color mapping ---
 team_colors = {
@@ -109,11 +98,20 @@ team_colors = {
 # --- Show charts ---
 st.header(f"{selected_year} {selected_race} Analysis")
 
+if apply_global_filters:
+    # Use global filters
+    show_pace_chart(df, selected_cars, top_percent, selected_classes, team_colors)
+    show_lap_position_chart(df, selected_cars, selected_classes, team_colors)
+    show_driver_pace_chart(df, selected_cars, top_percent, selected_classes, team_colors)
+    show_driver_pace_comparison(df, selected_cars, selected_classes, top_percent, team_colors)
+    show_gap_evolution_chart(df, selected_cars, selected_classes, team_colors)
+else:
+    # Use empty/default filters so charts show their own internal filters
+    show_pace_chart(df, [], 100, [], team_colors)
+    show_lap_position_chart(df, [], [], team_colors)
+    show_driver_pace_chart(df, [], 100, [], team_colors)
+    show_driver_pace_comparison(df, [], [], 100, team_colors)
+    show_gap_evolution_chart(df, [], [], team_colors)
 
-
-show_pace_chart(df, team_colors)
-show_driver_pace_chart(df, team_colors)
-show_lap_position_chart(df, team_colors)
-show_driver_pace_comparison(df, team_colors)
+# results_table does not use global filters
 show_results_table(df, team_colors)
-show_gap_evolution_chart(df, team_colors)

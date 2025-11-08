@@ -109,14 +109,10 @@ team_colors = {
 # --- Show charts ---
 st.header(f"{selected_year} {selected_race} Analysis")
 
-if apply_global_filters:
-    show_pace_chart(df, selected_cars, top_percent, selected_classes, team_colors)
-    show_driver_pace_chart(df, selected_cars, top_percent, selected_classes, team_colors)
-else:
-    show_pace_chart(df, team_colors)
-    show_driver_pace_chart(df, team_colors)
 
-# These charts use internal filters, so just call normally
+
+show_pace_chart(df, team_colors)
+show_driver_pace_chart(df, team_colors)
 show_lap_position_chart(df, team_colors)
 show_driver_pace_comparison(df, team_colors)
 show_results_table(df, team_colors)

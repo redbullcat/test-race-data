@@ -118,7 +118,11 @@ def show_stint_pace_chart(df, team_colors):
                 }
             )
 
+            y_min = stint_df_final["Stint Avg (Top 20%)"].min() - 0.5
+            y_max = stint_df_final["Stint Avg (Top 20%)"].max() + 0.5
+
             fig.update_layout(
+                yaxis=dict(range=[y_min, y_max]),
                 plot_bgcolor="#2b2b2b",
                 paper_bgcolor="#2b2b2b",
                 font=dict(color="white", size=14),

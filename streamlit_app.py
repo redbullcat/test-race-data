@@ -7,6 +7,7 @@ from driver_pace_chart import show_driver_pace_chart
 from driver_pace_comparison_chart import show_driver_pace_comparison
 from results_table import show_results_table
 from gap_evolution_chart import show_gap_evolution_chart
+from stint_pace_chart import show_stint_pace_chart
 
 # --- Load available race data ---
 DATA_DIR = "data"
@@ -115,3 +116,4 @@ show_lap_position_chart(df, team_colors)
 show_driver_pace_comparison(df, team_colors)
 show_results_table(df, team_colors)
 show_gap_evolution_chart(df, team_colors)
+show_stint_pace_chart(df, selected_cars, selected_classes, team_colors)

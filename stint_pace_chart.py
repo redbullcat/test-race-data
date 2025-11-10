@@ -4,7 +4,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-def show_stint_pace_chart(df, selected_cars, selected_classes, top_percent, team_colors):
+def show_stint_pace_chart(df, team_colors):
     """
     Show bar chart of average of top X% laps per stint (stints defined by CROSSING_FINISH_LINE_IN_PIT == 'B').
     - df: full dataframe

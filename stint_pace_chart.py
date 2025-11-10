@@ -13,6 +13,20 @@ def show_stint_pace_chart(df, team_colors):
         st.error("No LAP_TIME column found in the dataset (used for lap duration).")
         return
 
+    # --- Helper: convert LAP_TIME string to seconds ---
+    def lap_to_seconds(x):
+        try:
+            parts = x.split(":")
+            if len(parts) == 2:
+                mins, secs = parts
+                return int(mins) * 60 + float(secs)
+            elif len(parts) == 3:
+                hrs, mins, secs = parts
+                return int(hrs) * 3600 + int(mins) * 60 + float(secs)
+        except:
+            return None
+        return None
+
     # --- Create tabs per class ---
     classes = sorted(df["CLASS"].dropna().unique())
     tabs = st.tabs(classes)
@@ -53,7 +67,7 @@ def show_stint_pace_chart(df, team_colors):
             for car, car_df in filtered_df.groupby("NUMBER"):
                 car_df = car_df.sort_values("LAP_NUMBER").reset_index(drop=True)
 
-                # --- Find pitstop rows (CROSSING_FINISH_LINE_IN_PIT == 'B') ---
+                # --- Find pitstop rows ---
                 pit_indices = car_df.index[car_df["CROSSING_FINISH_LINE_IN_PIT"] == "B"].tolist()
 
                 # Define stint start/end indices (skip out-lap after stop)
@@ -65,8 +79,12 @@ def show_stint_pace_chart(df, team_colors):
                     if len(stint_df) < 3:
                         continue  # skip very short stints
 
-                    # Convert LAP_TIME to seconds
-                    stint_df["LAP_TIME_SEC"] = pd.to_timedelta(stint_df["LAP_TIME"]).dt.total_seconds()
+                    # Convert LAP_TIME to seconds manually
+                    stint_df["LAP_TIME_SEC"] = stint_df["LAP_TIME"].apply(lap_to_seconds)
+                    stint_df = stint_df.dropna(subset=["LAP_TIME_SEC"])
+
+                    if stint_df.empty:
+                        continue
 
                     # Get top 20% fastest laps in the stint
                     top_count = max(1, int(0.2 * len(stint_df)))

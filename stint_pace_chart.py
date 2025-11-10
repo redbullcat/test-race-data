@@ -5,15 +5,13 @@ import streamlit as st
 def show_stint_pace_chart(df, team_colors):
     st.header("Stint Pace Chart (Top 20% Fastest Laps per Stint)")
 
-    # --- Check required columns ---
-    if "LAP_NUMBER" not in df.columns:
-        st.error("No LAP_NUMBER column found in the dataset (used for lap numbering).")
-        return
-    if "LAP_TIME" not in df.columns:
-        st.error("No LAP_TIME column found in the dataset (used for lap duration).")
-        return
+    # Check for required columns
+    required_cols = ["LAP_NUMBER", "LAP_TIME", "CROSSING_FINISH_LINE_IN_PIT", "ELAPSED", "TEAM", "NUMBER", "CLASS"]
+    for col in required_cols:
+        if col not in df.columns:
+            st.error(f"Missing required column: {col}")
+            return
 
-    # --- Helper: convert LAP_TIME string to seconds ---
     def lap_to_seconds(x):
         try:
             parts = x.split(":")
@@ -27,7 +25,6 @@ def show_stint_pace_chart(df, team_colors):
             return None
         return None
 
-    # --- Create tabs per class ---
     classes = sorted(df["CLASS"].dropna().unique())
     tabs = st.tabs(classes)
 
@@ -67,38 +64,45 @@ def show_stint_pace_chart(df, team_colors):
             for car, car_df in filtered_df.groupby("NUMBER"):
                 car_df = car_df.sort_values("LAP_NUMBER").reset_index(drop=True)
 
-                # --- Find pitstop rows ---
                 pit_indices = car_df.index[car_df["CROSSING_FINISH_LINE_IN_PIT"] == "B"].tolist()
 
-                # Define stint start/end indices (skip out-lap after stop)
                 stint_starts = [0] + [p + 2 for p in pit_indices]
                 stint_ends = pit_indices + [len(car_df)]
 
                 for s, e in zip(stint_starts, stint_ends):
                     stint_df = car_df.iloc[s:e].copy()
                     if len(stint_df) < 3:
-                        continue  # skip very short stints
+                        continue
 
-                    # Convert LAP_TIME to seconds manually
                     stint_df["LAP_TIME_SEC"] = stint_df["LAP_TIME"].apply(lap_to_seconds)
                     stint_df = stint_df.dropna(subset=["LAP_TIME_SEC"])
 
                     if stint_df.empty:
                         continue
 
-                    # Get top 20% fastest laps in the stint
                     top_count = max(1, int(0.2 * len(stint_df)))
                     top_laps = stint_df.nsmallest(top_count, "LAP_TIME_SEC")
 
                     stint_avg = top_laps["LAP_TIME_SEC"].mean()
                     stint_length = len(stint_df)
+                    stint_start_time = stint_df["ELAPSED"].iloc[0]  # race time at start of stint
+
+                    # Map team to color robustly
+                    team_name = stint_df["TEAM"].iloc[0]
+                    color = "#888888"  # fallback
+                    for key, val in team_colors.items():
+                        if key.lower() in team_name.lower():
+                            color = val
+                            break
 
                     stint_data.append({
                         "NUMBER": car,
-                        "TEAM": stint_df["TEAM"].iloc[0] if "TEAM" in stint_df.columns else "",
+                        "TEAM": team_name,
                         "CLASS": cls,
                         "Stint Avg (Top 20%)": stint_avg,
-                        "Stint Length (laps)": stint_length
+                        "Stint Length (laps)": stint_length,
+                        "Stint Start Time": stint_start_time,
+                        "Color": color
                     })
 
             if not stint_data:
@@ -107,24 +111,30 @@ def show_stint_pace_chart(df, team_colors):
 
             stint_df_final = pd.DataFrame(stint_data)
 
-            # --- Plot bar chart ---
+            # Plot bar chart with x = Stint Start Time, y = Avg lap time
             fig = px.bar(
                 stint_df_final,
-                x="NUMBER",
+                x="Stint Start Time",
                 y="Stint Avg (Top 20%)",
-                color="NUMBER",
+                color="TEAM",
                 text="Stint Length (laps)",
-                color_discrete_map=team_colors,
-                title=f"Average of Top 20% Fastest Laps per Stint ({cls})"
+                color_discrete_map={team: color for team, color in zip(stint_df_final["TEAM"], stint_df_final["Color"])},
+                title=f"Average of Top 20% Fastest Laps per Stint ({cls})",
+                labels={
+                    "Stint Start Time": "Race Time (Elapsed)",
+                    "Stint Avg (Top 20%)": "Average Lap Time (s)"
+                }
             )
 
             fig.update_layout(
                 plot_bgcolor="#2b2b2b",
                 paper_bgcolor="#2b2b2b",
                 font_color="white",
-                xaxis_title="Car Number",
-                yaxis_title="Avg Lap Time (s)",
-                showlegend=False
+                xaxis=dict(showgrid=False),
+                yaxis=dict(title="Avg Lap Time (s)"),
+                legend_title_text="Team"
             )
+
+            fig.update_traces(textposition="outside")
 
             st.plotly_chart(fig, use_container_width=True)

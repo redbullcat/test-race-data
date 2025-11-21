@@ -22,6 +22,10 @@ for year in sorted(os.listdir(DATA_DIR)):
             race_files[year] = sorted(csv_files)
 
 # --- Sidebar Selectors ---
+
+# New order: Page first
+page = st.sidebar.selectbox("Page", ["Overview", "Team by team"])
+
 st.sidebar.header("Select Race")
 
 selected_year = st.sidebar.selectbox("Year", sorted(race_files.keys(), reverse=True))
@@ -107,13 +111,19 @@ team_colors = {
     'TF Sport': '#eaaa1d'
 }
 
-# --- Show charts ---
+# --- Show charts based on page selection ---
 st.header(f"{selected_year} {selected_race} Analysis")
 
-show_pace_chart(df, team_colors)
-show_driver_pace_chart(df, team_colors)
-show_lap_position_chart(df, team_colors)
-show_driver_pace_comparison(df, team_colors)
-show_results_table(df, team_colors)
-show_gap_evolution_chart(df, team_colors)
-show_stint_pace_chart(df, team_colors)
+if page == "Overview":
+    show_pace_chart(df, team_colors)
+    show_driver_pace_chart(df, team_colors)
+    show_lap_position_chart(df, team_colors)
+    show_driver_pace_comparison(df, team_colors)
+    show_results_table(df, team_colors)
+    show_gap_evolution_chart(df, team_colors)
+    show_stint_pace_chart(df, team_colors)
+
+elif page == "Team by team":
+    # Here you would implement the team-by-team driver comparison page
+    # For now, just show the driver pace comparison chart or any other relevant
+    show_driver_pace_comparison(df, team_colors)

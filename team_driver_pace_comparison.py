@@ -25,7 +25,7 @@ def show_team_driver_pace_comparison(df, team_colors):
     selected_race = st.selectbox("Select Race", race_files)
 
     # Load the selected race file
-    df = pd.read_csv(os.path.join(race_folder, selected_race))
+    df = pd.read_csv(os.path.join(race_folder, selected_race), delimiter=';')
 
     # Strip whitespace from headers to avoid key errors
     df.columns = df.columns.str.strip()

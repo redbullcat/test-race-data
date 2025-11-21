@@ -29,6 +29,7 @@ def show_team_driver_pace_comparison(df, team_colors):
 
     # Strip whitespace from headers to avoid key errors
     df.columns = df.columns.str.strip()
+    st.write("Columns loaded from CSV:", df.columns.tolist())
 
     # Validate required columns exist
     required_cols = {"TEAM", "DRIVER_NAME", "LAP_TIME", "CLASS", "NUMBER"}

@@ -4,7 +4,8 @@ import streamlit as st
 from pace_chart import show_pace_chart
 from lap_position_chart import show_lap_position_chart
 from driver_pace_chart import show_driver_pace_chart
-from driver_pace_comparison_chart import show_driver_pace_comparison
+from driver_pace_comparison_chart import show_driver_pace_comparison  # old comparison for Overview page
+from team_driver_pace_comparison import show_team_driver_pace_comparison  # new comparison for Team by team page
 from results_table import show_results_table
 from gap_evolution_chart import show_gap_evolution_chart
 from stint_pace_chart import show_stint_pace_chart
@@ -23,10 +24,7 @@ for year in sorted(os.listdir(DATA_DIR)):
 
 # --- Sidebar Selectors ---
 
-# New order: Page first
 page = st.sidebar.selectbox("Page", ["Overview", "Team by team"])
-
-st.sidebar.header("Select Race")
 
 selected_year = st.sidebar.selectbox("Year", sorted(race_files.keys(), reverse=True))
 selected_race = st.sidebar.selectbox("Race", race_files[selected_year])
@@ -50,7 +48,6 @@ df["NUMBER"] = df.apply(
     axis=1
 )
 
-# Convert NUMBER column to string for consistency
 df["NUMBER"] = df["NUMBER"].astype(str)
 
 # --- Apply global filters checkbox ---
@@ -61,16 +58,16 @@ st.sidebar.header("Filters")
 
 available_classes = df["CLASS"].dropna().unique().tolist()
 selected_classes = st.sidebar.multiselect(
-    "Select Classes", 
-    available_classes, 
+    "Select Classes",
+    available_classes,
     default=available_classes,
     disabled=not apply_global_filters
 )
 
 available_cars = df["NUMBER"].unique().tolist()
 selected_cars = st.sidebar.multiselect(
-    "Select Cars", 
-    available_cars, 
+    "Select Cars",
+    available_cars,
     default=available_cars,
     disabled=not apply_global_filters
 )
@@ -111,19 +108,18 @@ team_colors = {
     'TF Sport': '#eaaa1d'
 }
 
-# --- Show charts based on page selection ---
+# --- Show charts ---
+
 st.header(f"{selected_year} {selected_race} Analysis")
 
 if page == "Overview":
     show_pace_chart(df, team_colors)
     show_driver_pace_chart(df, team_colors)
     show_lap_position_chart(df, team_colors)
-    show_driver_pace_comparison(df, team_colors)
+    show_driver_pace_comparison(df, team_colors)  # old driver pace comparison here
     show_results_table(df, team_colors)
     show_gap_evolution_chart(df, team_colors)
     show_stint_pace_chart(df, team_colors)
 
 elif page == "Team by team":
-    # Here you would implement the team-by-team driver comparison page
-    # For now, just show the driver pace comparison chart or any other relevant
-    show_driver_pace_comparison(df, team_colors)
+    show_team_driver_pace_comparison(df, team_colors)  # new team driver pace comparison here

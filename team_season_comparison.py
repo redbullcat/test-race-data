@@ -131,6 +131,7 @@ def show_team_season_comparison(_, team_colors):
                     ),
                     text=driver_avgs["LAP_TIME_SEC"].round(3).astype(str),
                     textposition="outside",
+                    textangle=90,
                 )
             )
 

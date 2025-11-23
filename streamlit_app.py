@@ -122,4 +122,14 @@ if page == "Overview":
     show_stint_pace_chart(df, team_colors)
 
 elif page == "Team by team":
-    show_team_driver_pace_comparison(df, team_colors)  # new team driver pace comparison here
+
+    # --- ONLY CHANGE BELOW ---
+    # Create one tab per class
+    class_list = sorted(df["CLASS"].dropna().unique())
+    tabs = st.tabs(class_list)
+
+    for tab, race_class in zip(tabs, class_list):
+        with tab:
+            class_df = df[df["CLASS"] == race_class]
+            show_team_driver_pace_comparison(class_df, team_colors)
+    # --- ONLY CHANGE ABOVE ---

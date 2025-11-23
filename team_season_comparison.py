@@ -154,3 +154,105 @@ def show_team_season_comparison(_, team_colors):
 
         st.plotly_chart(fig, use_container_width=True)
         st.markdown("---")
+
+    # --- 8. Season summary chart: Driver average lap times across all races ---
+    st.subheader(f"{selected_team} - Season Summary ({selected_class})")
+
+    # Prepare data for all races combined
+    summary_records = []
+
+    for race_file in sorted(race_files):
+        race_name = race_file.replace(".csv", "")
+
+        df = pd.read_csv(os.path.join(year_path, race_file), delimiter=";")
+        df.columns = df.columns.str.strip()
+
+        # Filter by team and class
+        team_class_df = df[(df["TEAM"] == selected_team) & (df["CLASS"] == selected_class)]
+
+        if team_class_df.empty:
+            continue
+
+        # Convert lap times to seconds
+        def lap_to_seconds(x):
+            try:
+                mins, secs = x.split(":")
+                return int(mins) * 60 + float(secs)
+            except:
+                return None
+
+        team_class_df["LAP_TIME_SEC"] = team_class_df["LAP_TIME"].apply(lap_to_seconds)
+        team_class_df = team_class_df.dropna(subset=["LAP_TIME_SEC"])
+
+        # For each pace %, compute average lap time per driver for this race
+        for pct in pace_selected:
+            top_count = max(1, int(len(team_class_df) * pct / 100))
+            filtered_df = (
+                team_class_df.sort_values("LAP_TIME_SEC")
+                .groupby("DRIVER_NAME")
+                .head(top_count)
+            )
+
+            driver_avgs = (
+                filtered_df.groupby("DRIVER_NAME")["LAP_TIME_SEC"]
+                .mean()
+                .reset_index()
+            )
+
+            for _, row in driver_avgs.iterrows():
+                summary_records.append({
+                    "Race": race_name,
+                    "Driver": row["DRIVER_NAME"],
+                    "AverageLapTime": row["LAP_TIME_SEC"],
+                    "PacePercent": pct,
+                })
+
+    if not summary_records:
+        st.info("No data available for season summary chart.")
+        return
+
+    summary_df = pd.DataFrame(summary_records)
+
+    # Pivot for grouped bar chart: x=Race, y=AvgLapTime, group=Driver (and PacePercent for pattern)
+    fig = go.Figure()
+
+    # Get team color once
+    color = "#888888"
+    for key, val in team_colors.items():
+        if key.lower() in selected_team.lower():
+            color = val
+            break
+
+    # Plot bars: one trace per driver and pace percent combination
+    for (driver, pct), group_df in summary_df.groupby(["Driver", "PacePercent"]):
+        fig.add_trace(
+            go.Bar(
+                x=group_df["Race"],
+                y=group_df["AverageLapTime"],
+                name=f"{driver} - Top {pct}%",
+                marker=dict(color=color, pattern=dict(shape=pattern_shapes.get(pct, ""))),
+                text=group_df["AverageLapTime"].round(3).astype(str),
+                textposition="outside",
+                textangle=90,
+            )
+        )
+
+    # Calculate y-axis range with 1s padding
+    all_y_values = summary_df["AverageLapTime"].tolist()
+    min_y = min(all_y_values)
+    max_y = max(all_y_values)
+    y_range = [min_y - 1 if min_y - 1 > 0 else 0, max_y + 1]
+
+    fig.update_layout(
+        barmode="group",
+        plot_bgcolor="#2b2b2b",
+        paper_bgcolor="#2b2b2b",
+        font=dict(color="white"),
+        yaxis=dict(autorange=False, range=y_range, title="Average Lap Time (s)"),
+        xaxis=dict(title="Race"),
+        title=dict(text=f"{selected_team} - Driver Average Lap Times Across Season", font=dict(size=18)),
+        legend_title_text="Driver - Pace %",
+        legend=dict(font=dict(size=10)),
+    )
+
+    st.plotly_chart(fig, use_container_width=True)

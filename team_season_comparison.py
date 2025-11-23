@@ -155,7 +155,7 @@ def show_team_season_comparison(_, team_colors):
         st.plotly_chart(fig, use_container_width=True)
         st.markdown("---")
 
-    # --- 8. Season summary chart: Driver average lap times across all races ---
+    # --- 8. Season summary chart: Driver average lap times averaged across all races ---
     st.subheader(f"{selected_team} - Season Summary ({selected_class})")
 
     # Prepare data for all races combined
@@ -201,7 +201,6 @@ def show_team_season_comparison(_, team_colors):
 
             for _, row in driver_avgs.iterrows():
                 summary_records.append({
-                    "Race": race_name,
                     "Driver": row["DRIVER_NAME"],
                     "AverageLapTime": row["LAP_TIME_SEC"],
                     "PacePercent": pct,
@@ -213,8 +212,13 @@ def show_team_season_comparison(_, team_colors):
 
     summary_df = pd.DataFrame(summary_records)
 
-    # Pivot for grouped bar chart: x=Race, y=AvgLapTime, group=Driver (and PacePercent for pattern)
-    fig = go.Figure()
+    # Now group by Driver and PacePercent to calculate the overall season average
+    season_avg = (
+        summary_df
+        .groupby(["Driver", "PacePercent"])["AverageLapTime"]
+        .mean()
+        .reset_index()
+    )
 
     # Get team color once
     color = "#888888"
@@ -223,22 +227,27 @@ def show_team_season_comparison(_, team_colors):
             color = val
             break
 
-    # Plot bars: one trace per driver and pace percent combination
-    for (driver, pct), group_df in summary_df.groupby(["Driver", "PacePercent"]):
+    fig = go.Figure()
+
+    # Plot bars: one trace per pace percent, with drivers on x-axis and avg lap time on y-axis
+    for pct in pace_selected:
+        df_pct = season_avg[season_avg["PacePercent"] == pct]
+        if df_pct.empty:
+            continue
         fig.add_trace(
             go.Bar(
-                x=group_df["Race"],
-                y=group_df["AverageLapTime"],
-                name=f"{driver} - Top {pct}%",
+                x=df_pct["Driver"],
+                y=df_pct["AverageLapTime"],
+                name=f"Top {pct}%",
                 marker=dict(color=color, pattern=dict(shape=pattern_shapes.get(pct, ""))),
-                text=group_df["AverageLapTime"].round(3).astype(str),
+                text=df_pct["AverageLapTime"].round(3).astype(str),
                 textposition="outside",
                 textangle=90,
             )
         )
 
     # Calculate y-axis range with 1s padding
-    all_y_values = summary_df["AverageLapTime"].tolist()
+    all_y_values = season_avg["AverageLapTime"].tolist()
     min_y = min(all_y_values)
     max_y = max(all_y_values)
     y_range = [min_y - 1 if min_y - 1 > 0 else 0, max_y + 1]
@@ -249,9 +258,9 @@ def show_team_season_comparison(_, team_colors):
         paper_bgcolor="#2b2b2b",
         font=dict(color="white"),
         yaxis=dict(autorange=False, range=y_range, title="Average Lap Time (s)"),
-        xaxis=dict(title="Race"),
+        xaxis=dict(title="Driver"),
         title=dict(text=f"{selected_team} - Driver Average Lap Times Across Season", font=dict(size=18)),
-        legend_title_text="Driver - Pace %",
+        legend_title_text="Pace %",
         legend=dict(font=dict(size=10)),
     )
 

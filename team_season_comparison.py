@@ -124,7 +124,7 @@ def show_team_season_comparison(_, team_colors):
                         pattern=dict(shape=pattern_shapes.get(pct, ""))
                     ),
                     text=driver_avgs["LAP_TIME_SEC"].round(3).astype(str),
-                    textposition="auto",
+                    textposition="outside",
                 )
             )
 

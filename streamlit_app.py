@@ -123,13 +123,21 @@ if page == "Overview":
 
 elif page == "Team by team":
 
-    # --- ONLY CHANGE BELOW ---
-    # Create one tab per class
-    class_list = sorted(df["CLASS"].dropna().unique())
-    tabs = st.tabs(class_list)
+    # --- NEW (only change requested): class tabs + safety checks ---
+    race_classes = sorted(df["CLASS"].dropna().unique())
 
-    for tab, race_class in zip(tabs, class_list):
-        with tab:
-            class_df = df[df["CLASS"] == race_class]
-            show_team_driver_pace_comparison(class_df, team_colors)
-    # --- ONLY CHANGE ABOVE ---
+    if not race_classes:
+        st.warning("No class data available in this race.")
+    else:
+        tabs = st.tabs(race_classes)
+
+        for tab, race_class in zip(tabs, race_classes):
+            with tab:
+                st.subheader(f"{race_class}")
+
+                class_df = df[df["CLASS"] == race_class]
+
+                if class_df.empty:
+                    st.info("No data available for this class in this race.")
+                else:
+                    show_team_driver_pace_comparison(class_df, team_colors)

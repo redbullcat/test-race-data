@@ -6,28 +6,8 @@ import os
 def show_team_driver_pace_comparison(df, team_colors):
     st.header("Team-by-Team Driver Pace Comparison")
 
-    # --- Load race files correctly ---
-    race_folder = "data"
-    all_files = []
-
-    for root, dirs, files in os.walk(race_folder):
-        for f in files:
-            if f.endswith(".csv"):
-                all_files.append(os.path.join(root, f))
-
-    if not all_files:
-        st.error("No race CSV files found.")
-        return
-
-    # Clean race names for dropdown
-    race_display_names = [f.replace(race_folder + "/", "") for f in all_files]
-
-    selected_display = st.selectbox("Select Race", race_display_names)
-    selected_file = all_files[race_display_names.index(selected_display)]
-
-    # --- Load CSV ---
-    df = pd.read_csv(selected_file, delimiter=';')
-    df.columns = df.columns.str.strip()
+    # We assume df is already loaded from the selected year & race (passed in)
+    # so we do NOT load files here or show any dropdown
 
     required_cols = {"TEAM", "DRIVER_NAME", "LAP_TIME", "CLASS", "NUMBER"}
     if not required_cols.issubset(df.columns):
@@ -45,7 +25,7 @@ def show_team_driver_pace_comparison(df, team_colors):
     df["LAP_TIME_SEC"] = df["LAP_TIME"].apply(lap_to_seconds)
     df = df.dropna(subset=["LAP_TIME_SEC"])
 
-    # --- NEW: Class Tabs ---
+    # --- Class Tabs ---
     classes = sorted(df["CLASS"].dropna().unique())
     tabs = st.tabs(classes)
 

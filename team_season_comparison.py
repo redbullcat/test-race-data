@@ -88,6 +88,9 @@ def show_team_season_comparison(_, team_colors):
         # Start building figure with multiple traces (one per selected pace%)
         fig = go.Figure()
 
+        # Collect max y value to set y-axis range dynamically
+        max_y_val = 0
+
         # For each selected pace%, calculate average lap time per driver and add a trace
         for pct in pace_selected:
             top_count = max(1, int(len(team_class_df) * pct / 100))
@@ -106,6 +109,11 @@ def show_team_season_comparison(_, team_colors):
 
             if driver_avgs.empty:
                 continue
+
+            # Update max_y_val
+            current_max = driver_avgs["LAP_TIME_SEC"].max()
+            if current_max > max_y_val:
+                max_y_val = current_max
 
             # Get team color
             color = "#888888"
@@ -128,12 +136,21 @@ def show_team_season_comparison(_, team_colors):
                 )
             )
 
+        # Dynamically set y-axis range with 10% padding
+        if max_y_val > 0:
+            fig.update_layout(
+                yaxis=dict(range=[0, max_y_val * 1.1], title="Average Lap Time (s)")
+            )
+        else:
+            fig.update_layout(
+                yaxis=dict(autorange=True, title="Average Lap Time (s)")
+            )
+
         fig.update_layout(
             barmode="group",
             plot_bgcolor="#2b2b2b",
             paper_bgcolor="#2b2b2b",
             font=dict(color="white"),
-            yaxis=dict(autorange=True, title="Average Lap Time (s)"),
             title=dict(text=f"{selected_team} - Driver Average Lap Times", font=dict(size=18)),
         )
 

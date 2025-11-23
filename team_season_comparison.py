@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import os
-import plotly.express as px
 import plotly.graph_objects as go
 
 def show_team_season_comparison(_, team_colors):
@@ -20,18 +19,22 @@ def show_team_season_comparison(_, team_colors):
         st.error(f"No race data found for year {selected_year}")
         return
 
-    # --- 3. Get all teams for the year (collect from all races) ---
-    teams_set = set()
+    # --- 3. Get all classes and teams for the year (collect from all races) ---
     classes_set = set()
     for race_file in race_files:
         df = pd.read_csv(os.path.join(year_path, race_file), delimiter=";")
-        teams_set.update(df["TEAM"].dropna().unique())
         classes_set.update(df["CLASS"].dropna().unique())
-    teams = sorted(list(teams_set))
     classes = sorted(list(classes_set))
 
     # --- 4. Class selection dropdown ---
     selected_class = st.selectbox("Select Class", classes)
+
+    # --- Filter teams by selected class ---
+    teams_set = set()
+    for race_file in race_files:
+        df = pd.read_csv(os.path.join(year_path, race_file), delimiter=";")
+        teams_set.update(df[df["CLASS"] == selected_class]["TEAM"].dropna().unique())
+    teams = sorted(list(teams_set))
 
     # --- 5. Team selection dropdown ---
     selected_team = st.selectbox("Select Team", teams)
@@ -88,9 +91,6 @@ def show_team_season_comparison(_, team_colors):
         # Start building figure with multiple traces (one per selected pace%)
         fig = go.Figure()
 
-        # To calculate y-axis limits dynamically, gather all Y values
-        all_y_values = []
-
         # For each selected pace%, calculate average lap time per driver and add a trace
         for pct in pace_selected:
             top_count = max(1, int(len(team_class_df) * pct / 100))
@@ -109,9 +109,6 @@ def show_team_season_comparison(_, team_colors):
 
             if driver_avgs.empty:
                 continue
-
-            # Accumulate Y values for axis range calculation
-            all_y_values.extend(driver_avgs["LAP_TIME_SEC"].tolist())
 
             # Get team color
             color = "#888888"
@@ -135,23 +132,23 @@ def show_team_season_comparison(_, team_colors):
                 )
             )
 
-        # Calculate y-axis range with 1 second padding
+        # Calculate y-axis range with padding of 1 second
+        all_y_values = []
+        for trace in fig.data:
+            all_y_values.extend(trace.y)
         if all_y_values:
-            min_y = min(all_y_values) - 1
-            max_y = max(all_y_values) + 1
+            min_y = min(all_y_values)
+            max_y = max(all_y_values)
+            y_range = [min_y - 1 if min_y - 1 > 0 else 0, max_y + 1]
         else:
-            min_y, max_y = None, None
+            y_range = None
 
         fig.update_layout(
             barmode="group",
             plot_bgcolor="#2b2b2b",
             paper_bgcolor="#2b2b2b",
             font=dict(color="white"),
-            yaxis=dict(
-                autorange=False if min_y is not None and max_y is not None else True,
-                range=[min_y, max_y] if min_y is not None and max_y is not None else None,
-                title="Average Lap Time (s)"
-            ),
+            yaxis=dict(autorange=False, range=y_range, title="Average Lap Time (s)"),
             title=dict(text=f"{selected_team} - Driver Average Lap Times", font=dict(size=18)),
         )
 

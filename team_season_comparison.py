@@ -19,30 +19,41 @@ def show_team_season_comparison(_, team_colors):
         st.error(f"No race data found for year {selected_year}")
         return
 
-    # --- 3. Get all teams for the year (collect from all races) ---
+    # --- 3. Get all classes for the year (collect from all races) ---
+    classes_set = set()
+    for race_file in race_files:
+        df = pd.read_csv(os.path.join(year_path, race_file), delimiter=";")
+        classes_set.update(df["CLASS"].dropna().unique())
+    classes = sorted(list(classes_set))
+
+    # --- 4. Class selection dropdown ---
+    selected_class = st.selectbox("Select Class", classes)
+
+    # --- 5. Get all teams for the selected class in the year ---
     teams_set = set()
     for race_file in race_files:
         df = pd.read_csv(os.path.join(year_path, race_file), delimiter=";")
-        teams_set.update(df["TEAM"].dropna().unique())
+        class_teams = df[df["CLASS"] == selected_class]["TEAM"].dropna().unique()
+        teams_set.update(class_teams)
     teams = sorted(list(teams_set))
 
-    # --- 4. Team selection dropdown ---
+    # --- 6. Team selection dropdown ---
     selected_team = st.selectbox("Select Team", teams)
 
-    # --- 5. Show charts for each race ---
+    # --- 7. Show charts for each race ---
     for race_file in sorted(race_files):
         race_name = race_file.replace(".csv", "")
-        st.subheader(f"{race_name} — {selected_team}")
+        st.subheader(f"{race_name} — {selected_team} — {selected_class}")
 
         df = pd.read_csv(os.path.join(year_path, race_file), delimiter=";")
         df.columns = df.columns.str.strip()
 
-        # Filter to selected team
-        team_df = df[df["TEAM"] == selected_team]
+        # Filter to selected team and class
+        team_df = df[(df["TEAM"] == selected_team) & (df["CLASS"] == selected_class)]
 
         # Defensive: skip empty data
         if team_df.empty:
-            st.info(f"No data available for {selected_team} in {race_name}")
+            st.info(f"No data available for {selected_team} in {race_name} for class {selected_class}")
             continue
 
         # Convert lap times to seconds
@@ -65,7 +76,7 @@ def show_team_season_comparison(_, team_colors):
         )
 
         if driver_avgs.empty:
-            st.info(f"No valid lap times for {selected_team} in {race_name}")
+            st.info(f"No valid lap times for {selected_team} in {race_name} for class {selected_class}")
             continue
 
         # Get color for this team

@@ -3,41 +3,38 @@ import pandas as pd
 import plotly.express as px
 import os
 
-def show_team_driver_pace_comparison(df, team_colors):
-    st.header("Team Driver Pace Comparison (Per Team, Per Race)")
+def show_team_driver_pace_comparison(team_colors):
+    st.header("Team-by-Team Driver Pace Comparison")
 
-    # --- 1. Race selection (from CSV files in folders by year) ---
-    race_folder = "data"   # << change if needed
+    # --- Load race files correctly ---
+    race_folder = "data"
+    all_files = []
 
-    # Collect all CSV files recursively (from year subfolders)
-    race_files = []
-    for year_folder in sorted(os.listdir(race_folder)):
-        year_path = os.path.join(race_folder, year_folder)
-        if os.path.isdir(year_path):
-            for file in os.listdir(year_path):
-                if file.endswith(".csv"):
-                    race_files.append(os.path.join(year_folder, file))
+    for root, dirs, files in os.walk(race_folder):
+        for f in files:
+            if f.endswith(".csv"):
+                all_files.append(os.path.join(root, f))
 
-    if not race_files:
+    if not all_files:
         st.error("No race CSV files found.")
         return
 
-    selected_race = st.selectbox("Select Race", race_files)
+    # Clean race names for dropdown
+    race_display_names = [f.replace(race_folder + "/", "") for f in all_files]
 
-    # Load the selected race file
-    df = pd.read_csv(os.path.join(race_folder, selected_race), delimiter=';')
+    selected_display = st.selectbox("Select Race", race_display_names)
+    selected_file = all_files[race_display_names.index(selected_display)]
 
-    # Strip whitespace from headers to avoid key errors
+    # --- Load CSV ---
+    df = pd.read_csv(selected_file, delimiter=';')
     df.columns = df.columns.str.strip()
-    st.write("Columns loaded from CSV:", df.columns.tolist())
 
-    # Validate required columns exist
     required_cols = {"TEAM", "DRIVER_NAME", "LAP_TIME", "CLASS", "NUMBER"}
     if not required_cols.issubset(df.columns):
         st.error("CSV missing required columns.")
         return
 
-    # Convert lap times to seconds
+    # Convert lap times
     def lap_to_seconds(x):
         try:
             mins, secs = x.split(":")
@@ -48,50 +45,58 @@ def show_team_driver_pace_comparison(df, team_colors):
     df["LAP_TIME_SEC"] = df["LAP_TIME"].apply(lap_to_seconds)
     df = df.dropna(subset=["LAP_TIME_SEC"])
 
-    # Get teams for the selected race
-    teams = sorted(df["TEAM"].dropna().unique())
+    # --- NEW: Class Tabs ---
+    classes = sorted(df["CLASS"].dropna().unique())
+    tabs = st.tabs(classes)
 
-    st.markdown("### Teams in this race")
-    st.write(", ".join(teams))
-    st.markdown("---")
+    for cls, tab in zip(classes, tabs):
+        with tab:
+            class_df = df[df["CLASS"] == cls]
 
-    # Show pace comparison per team
-    for team in teams:
-        team_df = df[df["TEAM"] == team]
+            teams = sorted(class_df["TEAM"].dropna().unique())
 
-        driver_avgs = (
-            team_df.groupby("DRIVER_NAME")["LAP_TIME_SEC"]
-            .mean()
-            .reset_index()
-            .sort_values("LAP_TIME_SEC")
-        )
+            st.markdown(f"### {cls} Teams")
+            st.write(", ".join(teams))
+            st.markdown("---")
 
-        if driver_avgs.empty:
-            continue
+            # --- Team-by-team charts ---
+            for team in teams:
+                team_df = class_df[class_df["TEAM"] == team]
 
-        color = "#888888"
-        for key, val in team_colors.items():
-            if key.lower() in team.lower():
-                color = val
-                break
+                driver_avgs = (
+                    team_df.groupby("DRIVER_NAME")["LAP_TIME_SEC"]
+                    .mean()
+                    .reset_index()
+                    .sort_values("LAP_TIME_SEC")
+                )
 
-        fig = px.bar(
-            driver_avgs,
-            x="DRIVER_NAME",
-            y="LAP_TIME_SEC",
-            title=f"{team} — Driver Pace Comparison ({selected_race})",
-            labels={"LAP_TIME_SEC": "Average Lap Time (s)", "DRIVER_NAME": "Driver"},
-            color_discrete_sequence=[color],
-            text=driver_avgs["LAP_TIME_SEC"].round(3).astype(str),
-        )
+                if driver_avgs.empty:
+                    continue
 
-        fig.update_layout(
-            plot_bgcolor="#2b2b2b",
-            paper_bgcolor="#2b2b2b",
-            font=dict(color="white"),
-            yaxis=dict(autorange=True),
-            title_font=dict(size=22),
-        )
+                # Assign team color
+                color = "#888888"
+                for key, val in team_colors.items():
+                    if key.lower() in team.lower():
+                        color = val
+                        break
 
-        st.plotly_chart(fig, use_container_width=True)
-        st.markdown("---")
+                fig = px.bar(
+                    driver_avgs,
+                    x="DRIVER_NAME",
+                    y="LAP_TIME_SEC",
+                    title=f"{team} — Driver Comparison",
+                    labels={"LAP_TIME_SEC": "Average Lap Time (s)", "DRIVER_NAME": "Driver"},
+                    color_discrete_sequence=[color],
+                    text=driver_avgs["LAP_TIME_SEC"].round(3).astype(str),
+                )
+
+                fig.update_layout(
+                    plot_bgcolor="#2b2b2b",
+                    paper_bgcolor="#2b2b2b",
+                    font=dict(color="white"),
+                    yaxis=dict(autorange=True),
+                    title_font=dict(size=22),
+                )
+
+                st.plotly_chart(fig, use_container_width=True)
+                st.markdown("---")

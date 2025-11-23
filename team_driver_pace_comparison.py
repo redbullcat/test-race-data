@@ -3,7 +3,7 @@ import pandas as pd
 import plotly.express as px
 import os
 
-def show_team_driver_pace_comparison(team_colors):
+def show_team_driver_pace_comparison(df, team_colors):
     st.header("Team-by-Team Driver Pace Comparison")
 
     # --- Load race files correctly ---

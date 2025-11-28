@@ -10,6 +10,7 @@ from results_table import show_results_table
 from gap_evolution_chart import show_gap_evolution_chart
 from stint_pace_chart import show_stint_pace_chart
 from team_season_comparison import show_team_season_comparison  # <-- NEW import
+from track_analysis import show_track_analysis
 
 # --- Load available race data ---
 DATA_DIR = "data"
@@ -25,7 +26,7 @@ for year in sorted(os.listdir(DATA_DIR)):
 
 # --- Sidebar Selectors ---
 
-page = st.sidebar.selectbox("Page", ["Overview", "Team by team", "Team season comparison"])  # <-- added new page here
+page = st.sidebar.selectbox("Page", ["Overview", "Team by team", "Team season comparison", "Track analysis"])  # <-- added new page here
 
 selected_year = st.sidebar.selectbox("Year", sorted(race_files.keys(), reverse=True))
 selected_race = st.sidebar.selectbox("Race", race_files[selected_year])

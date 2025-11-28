@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import os
 
 def show_track_analysis(_, team_colors=None):
@@ -67,9 +68,13 @@ def show_track_analysis(_, team_colors=None):
 
     # --- 4. Display SVG ---
     st.markdown("### Track Layout")
+
     try:
         with open(svg_path, "r", encoding="utf-8") as f:
             svg = f.read()
-        st.markdown(svg, unsafe_allow_html=True)
+
+        # Render properly using HTML component (required for full SVG support)
+        components.html(svg, height=600, scrolling=False)
+
     except Exception as e:
         st.error(f"Error loading SVG: {e}")

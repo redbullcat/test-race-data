@@ -19,7 +19,7 @@ def list_years_and_tracks(tracks_root='tracks', data_root='data'):
 
     return year, track
 
-def main():
+def show_track_analysis():
     st.title("Track SVG Viewer")
 
     year, track = list_years_and_tracks()

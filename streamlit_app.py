@@ -212,3 +212,4 @@ elif page == "Track analysis":
     show_track_analysis(df, team_colors)
 
 elif page == "Practice / Test analysis":
+    st.info("Practice / Test analysis page coming soon.")

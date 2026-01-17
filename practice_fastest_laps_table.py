@@ -25,24 +25,43 @@ def show_practice_fastest_laps(df: pd.DataFrame):
         )
         return
 
-    # --- Parse lap time safely (mm:ss.000) ---
+    # --- Clean LAP_TIME values ---
+    df["LAP_TIME"] = (
+        df["LAP_TIME"]
+        .astype(str)
+        .str.strip()
+        .replace({
+            "": None,
+            "nan": None,
+            "NaN": None,
+            "00:00.000": None,
+        })
+    )
+
+    # --- Parse LAP_TIME (mm:ss.xxx -> Timedelta) ---
     df["LAP_TIME_TD"] = pd.to_timedelta(
-        df["LAP_TIME"],
+        "00:" + df["LAP_TIME"],
         errors="coerce"
     )
 
     # --- Drop invalid laps ---
     df = df.dropna(subset=["LAP_TIME_TD"])
 
+    if df.empty:
+        st.error("No valid lap times found after parsing LAP_TIME.")
+        st.write("Sample LAP_TIME values:")
+        st.write(df["LAP_TIME"].head(10))
+        return
+
     # --- Exclude pit laps if column exists ---
     if "CROSSING_FINISH_LINE_IN_PIT" in df.columns:
         df = df[df["CROSSING_FINISH_LINE_IN_PIT"] != 1]
 
     if df.empty:
-        st.warning("No valid laps available for fastest lap analysis.")
+        st.warning("All valid laps were pit laps.")
         return
 
-    # --- Per-session analysis ---
+    # --- Process each practice session separately ---
     for session, df_session in df.groupby("PRACTICE_SESSION"):
         st.markdown(f"#### {session}")
 
@@ -73,13 +92,8 @@ def show_practice_fastest_laps(df: pd.DataFrame):
 
         fastest["Gap"] = fastest["Gap"].apply(format_gap)
 
-        # --- Italicise driver who set fastest lap ---
-        def format_driver(row):
-            if row["Overall Position"] == 1:
-                return f"*{row['DRIVER_NAME']}*"
-            return row["DRIVER_NAME"]
-
-        fastest["Driver"] = fastest.apply(format_driver, axis=1)
+        # --- Driver formatting (semantic italics marker) ---
+        fastest["Driver"] = fastest["DRIVER_NAME"]
 
         # --- Display table ---
         display_df = fastest[
@@ -98,6 +112,6 @@ def show_practice_fastest_laps(df: pd.DataFrame):
 
         st.dataframe(
             display_df,
-            use_container_width=True,
+            width="stretch",
             hide_index=True
         )

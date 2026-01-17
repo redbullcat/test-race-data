@@ -82,7 +82,7 @@ def show_practice_pace_chart(df, team_colors):
         return "#888888"
 
     avg_df["color"] = avg_df["TEAM"].apply(get_team_color)
-    avg_df["Label"] = avg_df["NUMBER"] + " — " + avg_df["TEAM"]
+    avg_df["Label"] = avg_df["NUMBER"].astype(str) + " — " + avg_df["TEAM"]
 
     # --- Plotly bar chart ---
     fig = px.bar(

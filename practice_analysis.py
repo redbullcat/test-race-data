@@ -102,11 +102,6 @@ def show_practice_analysis(
     # --- Keep LAP_TIME as string and strip whitespace ---
     df["LAP_TIME"] = df["LAP_TIME"].astype(str).str.strip()
 
-    # --- Debug output ---
-    st.write("Columns loaded:", df.columns.tolist())
-    st.write("Sample LAP_TIME values:", df["LAP_TIME"].head(10).tolist())
-    st.write("Loaded sessions in combined dataframe:", df["PRACTICE_SESSION"].unique())
-
     # --- High-level metrics ---
     st.markdown("### Session Overview")
 

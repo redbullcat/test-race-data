@@ -4,6 +4,7 @@ import pandas as pd
 import streamlit as st
 
 from practice_fastest_laps_table import show_practice_fastest_laps
+from practice_pace_chart import show_practice_pace_chart
 
 PRACTICE_PATTERN = re.compile(r"_practice(\d+)\.csv$", re.IGNORECASE)
 

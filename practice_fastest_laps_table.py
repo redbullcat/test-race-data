@@ -10,6 +10,8 @@ def show_practice_fastest_laps(df: pd.DataFrame):
     # Strip all column headers just in case
     df.columns = df.columns.str.strip()
 
+    st.write("Columns after strip:", df.columns.tolist())
+
     # Check required columns
     required_columns = {"NUMBER", "LAP_TIME", "PRACTICE_SESSION", "CLASS", "DRIVER_NAME"}
     missing = required_columns - set(df.columns)
@@ -21,25 +23,40 @@ def show_practice_fastest_laps(df: pd.DataFrame):
     df["LAP_TIME"] = df["LAP_TIME"].astype(str).str.strip()
     df["DRIVER_NAME"] = df["DRIVER_NAME"].astype(str).str.strip()
 
-    # Robust lap time to seconds parser
+    st.write("Sample LAP_TIME values:", df["LAP_TIME"].head(10).tolist())
+
+    # Robust lap time to seconds parser supporting m:ss.sss or mm:ss.sss
     def lap_to_seconds(lap):
         if pd.isna(lap) or lap == "" or lap.lower() in {"nan", "na"}:
             return None
         lap = lap.strip()
-        parts = lap.split(':')
         try:
+            parts = lap.split(':')
             if len(parts) == 2:
                 m, s = parts
                 return int(m) * 60 + float(s)
-        except Exception:
+            elif len(parts) == 3:  # unlikely but just in case hh:mm:ss
+                h, m, s = parts
+                return int(h) * 3600 + int(m) * 60 + float(s)
+        except Exception as e:
+            st.write(f"Failed parsing lap time '{lap}': {e}")
             return None
         return None
 
+    # Apply parser and debug any failures
     df["LAP_TIME_SECONDS"] = df["LAP_TIME"].apply(lap_to_seconds)
+
+    # Show rows where parsing failed
+    failed_parse = df[df["LAP_TIME_SECONDS"].isna()][["LAP_TIME"]]
+    if not failed_parse.empty:
+        st.warning(f"LAP_TIME parsing failed for {len(failed_parse)} rows:")
+        st.write(failed_parse.head(10))
+
+    # Drop rows with invalid lap times
     df = df.dropna(subset=["LAP_TIME_SECONDS"])
 
     if df.empty:
-        st.warning("No valid lap times found.")
+        st.warning("No valid lap times found after parsing.")
         return
 
     # Build driver list per car

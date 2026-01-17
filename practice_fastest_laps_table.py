@@ -1,142 +1,103 @@
 import pandas as pd
-import plotly.graph_objects as go
 import streamlit as st
 
 
 def show_practice_fastest_laps(df: pd.DataFrame):
-    """
-    Displays fastest lap classification per practice session.
+    st.markdown("### Fastest Laps by Session")
 
-    One table per session, ranked by overall fastest lap.
-    """
+    # --- Defensive copy ---
+    df = df.copy()
 
+    # --- Required columns ---
     required_columns = {
-        "PRACTICE_SESSION",
         "NUMBER",
-        "CLASS",
         "LAP_TIME",
-        "DRIVER_NAME"
+        "PRACTICE_SESSION",
+        "CLASS",
+        "DRIVER_NAME",
     }
 
     missing = required_columns - set(df.columns)
     if missing:
         st.error(
-            "Missing required columns for fastest lap table: "
+            "Fastest laps table missing required columns: "
             + ", ".join(sorted(missing))
         )
         return
 
-    # Ensure lap time is numeric (seconds)
-    lap_times = df.copy()
-    lap_times["LAP_TIME"] = pd.to_timedelta(lap_times["LAP_TIME"]).dt.total_seconds()
+    # --- Parse lap time safely (mm:ss.000) ---
+    df["LAP_TIME_TD"] = pd.to_timedelta(
+        df["LAP_TIME"],
+        errors="coerce"
+    )
 
-    sessions = sorted(lap_times["PRACTICE_SESSION"].unique())
+    # --- Drop invalid laps ---
+    df = df.dropna(subset=["LAP_TIME_TD"])
 
-    for session in sessions:
-        st.markdown(f"### {session}")
+    # --- Exclude pit laps if column exists ---
+    if "CROSSING_FINISH_LINE_IN_PIT" in df.columns:
+        df = df[df["CROSSING_FINISH_LINE_IN_PIT"] != 1]
 
-        session_df = lap_times[lap_times["PRACTICE_SESSION"] == session]
+    if df.empty:
+        st.warning("No valid laps available for fastest lap analysis.")
+        return
+
+    # --- Per-session analysis ---
+    for session, df_session in df.groupby("PRACTICE_SESSION"):
+        st.markdown(f"#### {session}")
 
         # --- Fastest lap per car ---
-        fastest_laps = (
-            session_df
-            .loc[session_df.groupby("NUMBER")["LAP_TIME"].idxmin()]
-            .copy()
-        )
+        idx = df_session.groupby("NUMBER")["LAP_TIME_TD"].idxmin()
+        fastest = df_session.loc[idx].copy()
 
-        # --- Overall position ---
-        fastest_laps = fastest_laps.sort_values("LAP_TIME")
-        fastest_laps["Overall position"] = range(1, len(fastest_laps) + 1)
+        # --- Overall ranking ---
+        fastest = fastest.sort_values("LAP_TIME_TD")
+        fastest["Overall Position"] = range(1, len(fastest) + 1)
 
-        # --- Position in class ---
-        fastest_laps["Position in class"] = (
-            fastest_laps
-            .groupby("CLASS")["LAP_TIME"]
+        # --- Class ranking ---
+        fastest["Class Position"] = (
+            fastest
+            .groupby("CLASS")["LAP_TIME_TD"]
             .rank(method="min")
             .astype(int)
         )
 
         # --- Gap to leader ---
-        leader_time = fastest_laps["LAP_TIME"].min()
-        fastest_laps["Gap to leader"] = fastest_laps["LAP_TIME"] - leader_time
-        fastest_laps.loc[
-            fastest_laps["Gap to leader"] == 0, "Gap to leader"
-        ] = 0.0
+        leader_time = fastest.iloc[0]["LAP_TIME_TD"]
+        fastest["Gap"] = fastest["LAP_TIME_TD"] - leader_time
 
-        # --- Driver formatting ---
-        driver_map = (
-            session_df
-            .groupby("NUMBER")["DRIVER_NAME"]
-            .unique()
-            .to_dict()
-        )
+        def format_gap(td):
+            if td == pd.Timedelta(0):
+                return "—"
+            return f"+{td.total_seconds():.3f}s"
 
-        formatted_drivers = []
+        fastest["Gap"] = fastest["Gap"].apply(format_gap)
 
-        for _, row in fastest_laps.iterrows():
-            car = row["NUMBER"]
-            fastest_driver = row["DRIVER_NAME"]
+        # --- Italicise driver who set fastest lap ---
+        def format_driver(row):
+            if row["Overall Position"] == 1:
+                return f"*{row['DRIVER_NAME']}*"
+            return row["DRIVER_NAME"]
 
-            drivers = []
-            for d in driver_map.get(car, []):
-                if d == fastest_driver:
-                    drivers.append(f"<i>{d}</i>")
-                else:
-                    drivers.append(d)
+        fastest["Driver"] = fastest.apply(format_driver, axis=1)
 
-            formatted_drivers.append(", ".join(drivers))
-
-        fastest_laps["Drivers"] = formatted_drivers
-
-        # --- Format output ---
-        output_df = fastest_laps[
+        # --- Display table ---
+        display_df = fastest[
             [
-                "Overall position",
-                "Position in class",
+                "Overall Position",
+                "Class Position",
                 "NUMBER",
                 "CLASS",
-                "Drivers",
-                "LAP_TIME",
-                "Gap to leader"
+                "Driver",
+                "Gap",
             ]
-        ].rename(
-            columns={
-                "NUMBER": "Car",
-                "CLASS": "Class",
-                "LAP_TIME": "Fastest lap (s)"
-            }
-        )
+        ].rename(columns={
+            "NUMBER": "Car",
+            "CLASS": "Class",
+        })
 
-        output_df["Fastest lap (s)"] = output_df["Fastest lap (s)"].map(
-            lambda x: f"{x:.3f}"
+        st.dataframe(
+            display_df,
+            use_container_width=True,
+            hide_index=True
         )
-
-        output_df["Gap to leader"] = output_df["Gap to leader"].map(
-            lambda x: "—" if x == 0 else f"+{x:.3f}"
-        )
-
-        # --- Plotly table ---
-        fig = go.Figure(
-            data=[
-                go.Table(
-                    header=dict(
-                        values=list(output_df.columns),
-                        fill_color="#2b2b2b",
-                        font=dict(color="white", size=12),
-                        align="left"
-                    ),
-                    cells=dict(
-                        values=[output_df[col] for col in output_df.columns],
-                        fill_color="#1f1f1f",
-                        font=dict(color="white", size=11),
-                        align="left"
-                    )
-                )
-            ]
-        )
-
-        fig.update_layout(
-            margin=dict(l=0, r=0, t=10, b=0)
-        )
-
-        st.plotly_chart(fig, use_container_width=True)

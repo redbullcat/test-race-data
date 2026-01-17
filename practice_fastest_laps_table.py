@@ -159,7 +159,6 @@ def show_practice_fastest_laps(df: pd.DataFrame):
     fastest["Fastest Lap"] = fastest["LAP_TIME_TD"].apply(format_lap_time)
 
     # Extract team and manufacturer info for each car
-    # Use the first occurrence per car in the original dataframe (should be consistent)
     team_manuf = (
         df.groupby("NUMBER")
         .agg({

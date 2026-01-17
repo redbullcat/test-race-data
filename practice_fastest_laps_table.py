@@ -7,6 +7,9 @@ def show_practice_fastest_laps(df: pd.DataFrame):
     # Defensive copy
     df = df.copy()
 
+    # Strip all column headers just in case
+    df.columns = df.columns.str.strip()
+
     # Check required columns
     required_columns = {"NUMBER", "LAP_TIME", "PRACTICE_SESSION", "CLASS", "DRIVER_NAME"}
     missing = required_columns - set(df.columns)
@@ -14,11 +17,15 @@ def show_practice_fastest_laps(df: pd.DataFrame):
         st.error("Missing required columns: " + ", ".join(missing))
         return
 
-    # Helper: Convert LAP_TIME from mm:ss.xxx string to total seconds
+    # Strip whitespace from LAP_TIME and DRIVER_NAME columns
+    df["LAP_TIME"] = df["LAP_TIME"].astype(str).str.strip()
+    df["DRIVER_NAME"] = df["DRIVER_NAME"].astype(str).str.strip()
+
+    # Robust lap time to seconds parser
     def lap_to_seconds(lap):
-        if pd.isna(lap):
+        if pd.isna(lap) or lap == "" or lap.lower() in {"nan", "na"}:
             return None
-        lap = str(lap).strip()
+        lap = lap.strip()
         parts = lap.split(':')
         try:
             if len(parts) == 2:

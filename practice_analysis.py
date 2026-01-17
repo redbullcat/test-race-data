@@ -3,6 +3,7 @@ import re
 import pandas as pd
 import streamlit as st
 
+from practice_fastest_laps_table import show_practice_fastest_laps
 
 PRACTICE_PATTERN = re.compile(r"_practice(\d+)\.csv$", re.IGNORECASE)
 
@@ -16,12 +17,6 @@ def show_practice_analysis(
 ):
     """
     Practice / Test session analysis page.
-
-    This page:
-    - Discovers practice/test CSVs via filename pattern
-    - Allows multi-session selection via checkboxes
-    - Loads and concatenates selected sessions
-    - Acts as a controller for practice-specific charts
     """
 
     st.subheader("Practice / Test Session Analysis")
@@ -53,10 +48,7 @@ def show_practice_analysis(
     # --- Session selection UI ---
     st.markdown("### Session Selection")
 
-    all_sessions_selected = st.checkbox(
-        "All sessions",
-        value=True
-    )
+    all_sessions_selected = st.checkbox("All sessions", value=True)
 
     selected_sessions = []
 
@@ -77,25 +69,27 @@ def show_practice_analysis(
     session_dfs = []
 
     for session in selected_sessions:
-        file_path = practice_files[session]
-
         try:
-            df_session = pd.read_csv(file_path, delimiter=";")
+            df_session = pd.read_csv(practice_files[session], delimiter=";")
         except Exception as e:
             st.error(f"Failed to load Practice {session}: {e}")
             return
 
         df_session.columns = df_session.columns.str.strip()
-
-        # Tag each row with session metadata
         df_session["PRACTICE_SESSION"] = f"Practice {session}"
 
         session_dfs.append(df_session)
 
     df = pd.concat(session_dfs, ignore_index=True)
 
-    # --- Basic validation ---
-    required_columns = {"LAP_TIME", "NUMBER", "TEAM"}
+    # --- Validation ---
+    required_columns = {
+        "LAP_TIME",
+        "NUMBER",
+        "TEAM",
+        "CLASS",
+        "DRIVER_NAME"
+    }
 
     missing_columns = required_columns - set(df.columns)
     if missing_columns:
@@ -103,6 +97,13 @@ def show_practice_analysis(
             "Missing required columns for practice analysis: "
             + ", ".join(sorted(missing_columns))
         )
+        return
+
+    # --- Normalise lap times ---
+    try:
+        df["LAP_TIME"] = pd.to_timedelta(df["LAP_TIME"]).dt.total_seconds()
+    except Exception:
+        st.error("Unable to parse LAP_TIME column.")
         return
 
     # --- High-level metrics ---
@@ -120,19 +121,8 @@ def show_practice_analysis(
         st.metric("Cars", df["NUMBER"].nunique())
 
     with col4:
-        if "DRIVER_NAME" in df.columns:
-            st.metric("Drivers", df["DRIVER_NAME"].nunique())
-        else:
-            st.metric("Drivers", "N/A")
+        st.metric("Drivers", df["DRIVER_NAME"].nunique())
 
     st.markdown("---")
 
-    # --- Placeholder for charts ---
-    st.info(
-        "Practice/Test charts will appear here.\n\n"
-        "Planned analyses:\n"
-        "- Best lap comparison\n"
-        "- Top-percentile pace\n"
-        "- Lap time distributions\n"
-        "- Sector performance heatmaps"
-    )
+    show_practice_fastest_laps(df)

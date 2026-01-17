@@ -100,12 +100,12 @@ def show_practice_analysis(
         )
         return
 
-    # --- Normalise lap times ---
-    try:
-        df["LAP_TIME"] = pd.to_timedelta(df["LAP_TIME"]).dt.total_seconds()
-    except Exception:
-        st.error("Unable to parse LAP_TIME column.")
-        return
+    # --- Keep LAP_TIME as string and strip whitespace ---
+    df["LAP_TIME"] = df["LAP_TIME"].astype(str).str.strip()
+
+    # --- Debug output ---
+    st.write("Columns loaded:", df.columns.tolist())
+    st.write("Sample LAP_TIME values:", df["LAP_TIME"].head(10).tolist())
 
     # --- High-level metrics ---
     st.markdown("### Session Overview")

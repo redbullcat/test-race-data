@@ -5,6 +5,12 @@ import streamlit as st
 def show_practice_fastest_laps(df: pd.DataFrame):
     st.markdown("### Fastest Laps by Session")
 
+    # --- DEBUGGING OUTPUT (TEMPORARY) ---
+    st.write("Rows received:", len(df))
+    st.write("Columns:", list(df.columns))
+    st.write("Sessions:", df["PRACTICE_SESSION"].unique())
+    st.write("Valid LAP_TIME rows:", df["LAP_TIME"].notna().sum())
+
     # --- Defensive copy ---
     df = df.copy()
 
@@ -92,7 +98,7 @@ def show_practice_fastest_laps(df: pd.DataFrame):
 
         fastest["Gap"] = fastest["Gap"].apply(format_gap)
 
-        # --- Driver formatting (semantic italics marker) ---
+        # --- Driver formatting (semantic italics marker only) ---
         fastest["Driver"] = fastest["DRIVER_NAME"]
 
         # --- Display table ---

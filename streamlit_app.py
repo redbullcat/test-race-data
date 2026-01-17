@@ -213,4 +213,10 @@ elif page == "Track analysis":
     show_track_analysis(df, team_colors)
 
 elif page == "Practice / Test analysis":
-    show_practice_analysis(df, team_colors)
+    show_practice_analysis(
+        data_dir=DATA_DIR,
+        year=selected_year,
+        series=selected_series,
+        race=selected_race,
+        team_colors=team_colors
+    )

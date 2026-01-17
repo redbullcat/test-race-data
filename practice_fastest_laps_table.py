@@ -35,7 +35,9 @@ def show_practice_fastest_laps(df: pd.DataFrame):
         "PRACTICE_SESSION",
         "CLASS",
         "DRIVER_NAME",
-        "LAP_NUMBER"
+        "LAP_NUMBER",
+        "TEAM",
+        "MANUFACTURER",
     }
 
     missing = required_columns - set(df.columns)
@@ -156,6 +158,19 @@ def show_practice_fastest_laps(df: pd.DataFrame):
 
     fastest["Fastest Lap"] = fastest["LAP_TIME_TD"].apply(format_lap_time)
 
+    # Extract team and manufacturer info for each car
+    # Use the first occurrence per car in the original dataframe (should be consistent)
+    team_manuf = (
+        df.groupby("NUMBER")
+        .agg({
+            "TEAM": "first",
+            "MANUFACTURER": "first"
+        })
+        .rename(columns={"TEAM": "Team", "MANUFACTURER": "Manufacturer"})
+    )
+
+    fastest = fastest.merge(team_manuf, left_on="NUMBER", right_index=True, how="left")
+
     # Prepare display dataframe including the session column and new columns
     display_df = fastest[
         [
@@ -169,6 +184,8 @@ def show_practice_fastest_laps(df: pd.DataFrame):
             "Gap",
             "Interval",
             "Laps Completed",
+            "Team",
+            "Manufacturer",
         ]
     ].rename(columns={
         "NUMBER": "Car",

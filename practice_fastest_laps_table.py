@@ -35,6 +35,7 @@ def show_practice_fastest_laps(df: pd.DataFrame):
         "PRACTICE_SESSION",
         "CLASS",
         "DRIVER_NAME",
+        "LAP_NUMBER"
     }
 
     missing = required_columns - set(df.columns)
@@ -76,6 +77,9 @@ def show_practice_fastest_laps(df: pd.DataFrame):
         st.warning("All valid laps were pit laps.")
         return
 
+    # Calculate total laps per car across all sessions
+    laps_completed = df.groupby("NUMBER")["LAP_NUMBER"].nunique().rename("Laps Completed")
+
     # Find fastest lap per car across all sessions combined
     idx = df.groupby("NUMBER")["LAP_TIME_TD"].idxmin()
     fastest = df.loc[idx].copy()
@@ -102,8 +106,44 @@ def show_practice_fastest_laps(df: pd.DataFrame):
 
     fastest["Gap"] = fastest["Gap"].apply(format_gap)
 
-    # Driver formatting
-    fastest["Driver"] = fastest["DRIVER_NAME"]
+    # Create a map: car -> all unique drivers sorted alphabetically
+    drivers_map = (
+        df.groupby("NUMBER")["DRIVER_NAME"]
+        .unique()
+        .apply(lambda names: sorted(set(names)))
+        .to_dict()
+    )
+
+    # Build the Driver column with all drivers per car, italicizing the fastest lap setter
+    def format_drivers(row):
+        car = row["NUMBER"]
+        fastest_driver = row["DRIVER_NAME"]
+        drivers = drivers_map.get(car, [])
+        formatted_drivers = []
+        for d in drivers:
+            if d == fastest_driver:
+                formatted_drivers.append(f"*{d}*")
+            else:
+                formatted_drivers.append(d)
+        return " / ".join(formatted_drivers)
+
+    fastest["Driver"] = fastest.apply(format_drivers, axis=1)
+
+    # Calculate interval to the car ahead
+    fastest = fastest.sort_values("LAP_TIME_TD").reset_index(drop=True)
+    intervals = []
+    for i, row in fastest.iterrows():
+        if i == 0:
+            intervals.append("—")
+        else:
+            prev_time = fastest.loc[i-1, "LAP_TIME_TD"]
+            gap = row["LAP_TIME_TD"] - prev_time
+            intervals.append(f"+{gap.total_seconds():.3f}s")
+
+    fastest["Interval"] = intervals
+
+    # Add laps completed column
+    fastest = fastest.merge(laps_completed, left_on="NUMBER", right_index=True, how="left")
 
     # Format fastest lap time for display
     def format_lap_time(td):
@@ -116,7 +156,7 @@ def show_practice_fastest_laps(df: pd.DataFrame):
 
     fastest["Fastest Lap"] = fastest["LAP_TIME_TD"].apply(format_lap_time)
 
-    # Prepare display dataframe including the session column and fastest lap
+    # Prepare display dataframe including the session column and new columns
     display_df = fastest[
         [
             "Overall Position",
@@ -127,6 +167,8 @@ def show_practice_fastest_laps(df: pd.DataFrame):
             "PRACTICE_SESSION",
             "Fastest Lap",
             "Gap",
+            "Interval",
+            "Laps Completed",
         ]
     ].rename(columns={
         "NUMBER": "Car",

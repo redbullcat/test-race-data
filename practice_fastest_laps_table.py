@@ -1,123 +1,104 @@
 import pandas as pd
 import streamlit as st
 
-
 def show_practice_fastest_laps(df: pd.DataFrame):
-    st.markdown("### Fastest Laps by Session")
+    st.subheader("⏱️ Practice Sessions - Fastest Laps")
 
-    # --- DEBUGGING OUTPUT (TEMPORARY) ---
-    st.write("Rows received:", len(df))
-    st.write("Columns:", list(df.columns))
-    st.write("Sessions:", df["PRACTICE_SESSION"].unique())
-    st.write("Valid LAP_TIME rows:", df["LAP_TIME"].notna().sum())
-
-    # --- Defensive copy ---
+    # Defensive copy
     df = df.copy()
 
-    # --- Required columns ---
-    required_columns = {
-        "NUMBER",
-        "LAP_TIME",
-        "PRACTICE_SESSION",
-        "CLASS",
-        "DRIVER_NAME",
-    }
-
+    # Check required columns
+    required_columns = {"NUMBER", "LAP_TIME", "PRACTICE_SESSION", "CLASS", "DRIVER_NAME"}
     missing = required_columns - set(df.columns)
     if missing:
-        st.error(
-            "Fastest laps table missing required columns: "
-            + ", ".join(sorted(missing))
-        )
+        st.error("Missing required columns: " + ", ".join(missing))
         return
 
-    # --- Clean LAP_TIME values ---
-    df["LAP_TIME"] = (
-        df["LAP_TIME"]
-        .astype(str)
-        .str.strip()
-        .replace({
-            "": None,
-            "nan": None,
-            "NaN": None,
-            "00:00.000": None,
-        })
-    )
+    # Helper: Convert LAP_TIME from mm:ss.xxx string to total seconds
+    def lap_to_seconds(lap):
+        if pd.isna(lap):
+            return None
+        lap = str(lap).strip()
+        parts = lap.split(':')
+        try:
+            if len(parts) == 2:
+                m, s = parts
+                return int(m) * 60 + float(s)
+        except Exception:
+            return None
+        return None
 
-    # --- Parse LAP_TIME (mm:ss.xxx -> Timedelta) ---
-    df["LAP_TIME_TD"] = pd.to_timedelta(
-        "00:" + df["LAP_TIME"],
-        errors="coerce"
-    )
-
-    # --- Drop invalid laps ---
-    df = df.dropna(subset=["LAP_TIME_TD"])
+    df["LAP_TIME_SECONDS"] = df["LAP_TIME"].apply(lap_to_seconds)
+    df = df.dropna(subset=["LAP_TIME_SECONDS"])
 
     if df.empty:
-        st.error("No valid lap times found after parsing LAP_TIME.")
-        st.write("Sample LAP_TIME values:")
-        st.write(df["LAP_TIME"].head(10))
+        st.warning("No valid lap times found.")
         return
 
-    # --- Exclude pit laps if column exists ---
-    if "CROSSING_FINISH_LINE_IN_PIT" in df.columns:
-        df = df[df["CROSSING_FINISH_LINE_IN_PIT"] != 1]
+    # Build driver list per car
+    driver_map = (
+        df.groupby("NUMBER")["DRIVER_NAME"]
+        .unique()
+        .apply(lambda x: " / ".join(sorted(x)))
+        .to_dict()
+    )
 
-    if df.empty:
-        st.warning("All valid laps were pit laps.")
-        return
+    # For each session, produce a fastest laps table
+    sessions = sorted(df["PRACTICE_SESSION"].unique())
+    for session in sessions:
+        st.markdown(f"### {session}")
 
-    # --- Process each practice session separately ---
-    for session, df_session in df.groupby("PRACTICE_SESSION"):
-        st.markdown(f"#### {session}")
+        session_df = df[df["PRACTICE_SESSION"] == session].copy()
 
-        # --- Fastest lap per car ---
-        idx = df_session.groupby("NUMBER")["LAP_TIME_TD"].idxmin()
-        fastest = df_session.loc[idx].copy()
+        # Find fastest lap per car
+        idx = session_df.groupby("NUMBER")["LAP_TIME_SECONDS"].idxmin()
+        fastest = session_df.loc[idx].copy()
 
-        # --- Overall ranking ---
-        fastest = fastest.sort_values("LAP_TIME_TD")
+        # Overall position by fastest lap time
+        fastest = fastest.sort_values("LAP_TIME_SECONDS")
         fastest["Overall Position"] = range(1, len(fastest) + 1)
 
-        # --- Class ranking ---
+        # Class position
         fastest["Class Position"] = (
-            fastest
-            .groupby("CLASS")["LAP_TIME_TD"]
+            fastest.groupby("CLASS")["LAP_TIME_SECONDS"]
             .rank(method="min")
             .astype(int)
         )
 
-        # --- Gap to leader ---
-        leader_time = fastest.iloc[0]["LAP_TIME_TD"]
-        fastest["Gap"] = fastest["LAP_TIME_TD"] - leader_time
+        # Gap to leader
+        leader_time = fastest.iloc[0]["LAP_TIME_SECONDS"]
+        fastest["Gap (s)"] = fastest["LAP_TIME_SECONDS"] - leader_time
+        fastest["Gap (s)"] = fastest["Gap (s)"].apply(lambda x: "—" if x == 0 else f"+{x:.3f}")
 
-        def format_gap(td):
-            if td == pd.Timedelta(0):
-                return "—"
-            return f"+{td.total_seconds():.3f}s"
+        # Drivers - full list and italicize driver with fastest lap
+        def format_drivers(row):
+            all_drivers = driver_map.get(row["NUMBER"], "")
+            fastest_driver = row["DRIVER_NAME"]
+            # Italicize fastest driver within all drivers
+            if fastest_driver in all_drivers:
+                return all_drivers.replace(fastest_driver, f"*{fastest_driver}*")
+            return all_drivers
 
-        fastest["Gap"] = fastest["Gap"].apply(format_gap)
+        fastest["Drivers"] = fastest.apply(format_drivers, axis=1)
 
-        # --- Driver formatting (semantic italics marker only) ---
-        fastest["Driver"] = fastest["DRIVER_NAME"]
-
-        # --- Display table ---
+        # Prepare display DataFrame
         display_df = fastest[
             [
                 "Overall Position",
                 "Class Position",
                 "NUMBER",
                 "CLASS",
-                "Driver",
-                "Gap",
+                "Drivers",
+                "LAP_TIME",
+                "Gap (s)",
             ]
         ].rename(columns={
             "NUMBER": "Car",
             "CLASS": "Class",
+            "LAP_TIME": "Fastest Lap"
         })
 
-        st.dataframe(
-            display_df,
-            width="stretch",
-            hide_index=True
-        )
+        # Set index as position for nicer display
+        display_df = display_df.set_index("Overall Position")
+
+        st.dataframe(display_df, width="stretch", hide_index=False)

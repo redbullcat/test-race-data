@@ -54,7 +54,7 @@ selected_series = st.sidebar.selectbox(
 
 page = st.sidebar.selectbox(
     "Page",
-    ["Overview", "Team by team", "Team season comparison", "Track analysis"]
+    ["Overview", "Team by team", "Team season comparison", "Track analysis", "Practice / Test analysis"]
 )
 
 selected_year = st.sidebar.selectbox(
@@ -210,3 +210,5 @@ elif page == "Team season comparison":
 
 elif page == "Track analysis":
     show_track_analysis(df, team_colors)
+
+elif page == "Practice / Test analysis"

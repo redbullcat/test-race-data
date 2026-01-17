@@ -122,3 +122,4 @@ def show_practice_analysis(
     st.markdown("---")
 
     show_practice_fastest_laps(df)
+    show_practice_pace_chart(df, team_colors)

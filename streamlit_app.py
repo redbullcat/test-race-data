@@ -12,6 +12,7 @@ from gap_evolution_chart import show_gap_evolution_chart
 from stint_pace_chart import show_stint_pace_chart
 from team_season_comparison import show_team_season_comparison
 from track_analysis import show_track_analysis
+from practice_analysis import show_practice_analysis
 
 # --- Load available race data ---
 DATA_DIR = "data"
@@ -212,4 +213,4 @@ elif page == "Track analysis":
     show_track_analysis(df, team_colors)
 
 elif page == "Practice / Test analysis":
-    st.info("Practice / Test analysis page coming soon.")
+    show_practice_analysis(df, team_colors)

@@ -81,6 +81,7 @@ def show_practice_analysis(
         session_dfs.append(df_session)
 
     df = pd.concat(session_dfs, ignore_index=True)
+    df.columns = df.columns.str.strip()
 
     # --- Validation ---
     required_columns = {

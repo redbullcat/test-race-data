@@ -211,4 +211,4 @@ elif page == "Team season comparison":
 elif page == "Track analysis":
     show_track_analysis(df, team_colors)
 
-elif page == "Practice / Test analysis"
+elif page == "Practice / Test analysis":

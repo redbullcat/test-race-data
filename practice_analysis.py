@@ -7,6 +7,7 @@ from practice_fastest_laps_table import show_practice_fastest_laps
 from practice_pace_chart import show_practice_pace_chart
 
 PRACTICE_PATTERN = re.compile(r"_practice(\d+)\.csv$", re.IGNORECASE)
+SESSION_PATTERN = re.compile(r"_session(\d+)\.csv$", re.IGNORECASE)
 
 def show_practice_analysis(
     data_dir: str,
@@ -27,16 +28,21 @@ def show_practice_analysis(
         st.error("Data directory not found.")
         return
 
-    # --- Discover practice sessions ---
+    # --- Discover practice and session files ---
     practice_files = {}
 
     for filename in os.listdir(base_path):
         if not filename.lower().startswith(race.lower()):
             continue
 
-        match = PRACTICE_PATTERN.search(filename)
-        if match:
-            session_number = int(match.group(1))
+        match_practice = PRACTICE_PATTERN.search(filename)
+        match_session = SESSION_PATTERN.search(filename)
+
+        if match_practice:
+            session_number = int(match_practice.group(1))
+            practice_files[session_number] = os.path.join(base_path, filename)
+        elif match_session:
+            session_number = int(match_session.group(1))
             practice_files[session_number] = os.path.join(base_path, filename)
 
     if not practice_files:

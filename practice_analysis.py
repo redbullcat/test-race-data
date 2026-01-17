@@ -7,7 +7,6 @@ from practice_fastest_laps_table import show_practice_fastest_laps
 
 PRACTICE_PATTERN = re.compile(r"_practice(\d+)\.csv$", re.IGNORECASE)
 
-
 def show_practice_analysis(
     data_dir: str,
     year: str,
@@ -106,6 +105,7 @@ def show_practice_analysis(
     # --- Debug output ---
     st.write("Columns loaded:", df.columns.tolist())
     st.write("Sample LAP_TIME values:", df["LAP_TIME"].head(10).tolist())
+    st.write("Loaded sessions in combined dataframe:", df["PRACTICE_SESSION"].unique())
 
     # --- High-level metrics ---
     st.markdown("### Session Overview")

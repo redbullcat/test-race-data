@@ -105,7 +105,18 @@ def show_practice_fastest_laps(df: pd.DataFrame):
     # Driver formatting
     fastest["Driver"] = fastest["DRIVER_NAME"]
 
-    # Prepare display dataframe including the session column
+    # Format fastest lap time for display
+    def format_lap_time(td):
+        if pd.isna(td):
+            return ""
+        total_seconds = td.total_seconds()
+        minutes = int(total_seconds // 60)
+        seconds = total_seconds % 60
+        return f"{minutes}:{seconds:06.3f}"
+
+    fastest["Fastest Lap"] = fastest["LAP_TIME_TD"].apply(format_lap_time)
+
+    # Prepare display dataframe including the session column and fastest lap
     display_df = fastest[
         [
             "Overall Position",
@@ -114,6 +125,7 @@ def show_practice_fastest_laps(df: pd.DataFrame):
             "CLASS",
             "Driver",
             "PRACTICE_SESSION",
+            "Fastest Lap",
             "Gap",
         ]
     ].rename(columns={

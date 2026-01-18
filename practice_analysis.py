@@ -76,6 +76,8 @@ def get_longest_stints(df):
 
         max_stint = []
         max_stint_session = None
+        max_stint_len = 0
+
         current_stint = []
         current_stint_session = None
 
@@ -96,9 +98,10 @@ def get_longest_stints(df):
                     if len(current_stint) > 0:
                         current_stint = current_stint[:-1]
 
-                    if len(current_stint) > len(max_stint):
+                    if len(current_stint) > max_stint_len:
                         max_stint = current_stint
                         max_stint_session = current_stint_session
+                        max_stint_len = len(current_stint)
 
                 current_stint = []
                 current_stint_session = None
@@ -112,9 +115,10 @@ def get_longest_stints(df):
             current_stint.append(row)
 
         # Final check after loop
-        if current_stint and len(current_stint) > len(max_stint):
+        if current_stint and len(current_stint) > max_stint_len:
             max_stint = current_stint
             max_stint_session = current_stint_session
+            max_stint_len = len(current_stint)
 
         if not max_stint:
             continue

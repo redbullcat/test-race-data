@@ -1,3 +1,4 @@
+import math
 import pandas as pd
 import plotly.express as px
 import streamlit as st
@@ -9,7 +10,6 @@ def parse_hour_time(series: pd.Series) -> pd.Series:
     """
     dt = pd.to_datetime(series, format="%H:%M:%S.%f", errors="coerce")
 
-    # Handle midnight rollover (session crossing midnight)
     rollover = dt.diff().dt.total_seconds() < -12 * 3600
     dt += pd.to_timedelta(rollover.cumsum(), unit="D")
 
@@ -40,7 +40,6 @@ def show_practice_team_run_analysis(df, team_colors):
 
     team_df = class_df[class_df["TEAM"] == selected_team]
 
-    # Car selector (always shown, but meaningful only if >1 car)
     cars = sorted(team_df["NUMBER"].dropna().unique().tolist())
     selected_car = st.selectbox(
         "Select Car:",
@@ -55,10 +54,12 @@ def show_practice_team_run_analysis(df, team_colors):
         return
 
     # ----------------------------
-    # Canonical session clock from HOUR
+    # Canonical session clock (HOUR only used for relative offsets)
     # ----------------------------
     team_df["HOUR_DT"] = parse_hour_time(team_df["HOUR"])
     team_df = team_df.dropna(subset=["HOUR_DT"])
+
+    session_durations = st.session_state.get("session_durations", {})
 
     # ----------------------------
     # Per-session charts
@@ -66,17 +67,26 @@ def show_practice_team_run_analysis(df, team_colors):
     for session_name, session_df in team_df.groupby("PRACTICE_SESSION"):
         st.markdown(f"### {session_name}")
 
-        # Session-global start/end based on HOUR
-        session_start_dt = session_df["HOUR_DT"].min()
-        session_end_dt = session_df["HOUR_DT"].max()
+        # Extract session number from "Session X"
+        try:
+            session_number = int(session_name.split()[-1])
+        except Exception:
+            st.warning(f"Could not determine duration for {session_name}.")
+            continue
 
-        session_duration_min = (
-            (session_end_dt - session_start_dt).total_seconds() / 60
-        )
+        if session_number not in session_durations:
+            st.warning(f"No timing data available for {session_name}.")
+            continue
+
+        # Use canonical session duration (rounded up for display)
+        session_duration_min = math.ceil(session_durations[session_number])
+
+        # Session-relative zero (first car to cross line in this session)
+        session_start_dt = session_df["HOUR_DT"].min()
 
         runs = []
 
-        for car_number, car_df in session_df.groupby("NUMBER"):
+        for _, car_df in session_df.groupby("NUMBER"):
             car_df = car_df.sort_values("LAP_NUMBER").reset_index(drop=True)
 
             current_run = []
@@ -118,12 +128,10 @@ def show_practice_team_run_analysis(df, team_colors):
                 (run_end_dt - run_start_dt).total_seconds() / 60
             )
 
-            lap_count = len(run_df)
-
             run_rows.append({
                 "Run Start": start_time_min,
                 "Run Duration": duration_min,
-                "Laps": lap_count,
+                "Laps": len(run_df),
                 "Car": run_df.iloc[0]["NUMBER"],
             })
 
@@ -134,9 +142,9 @@ def show_practice_team_run_analysis(df, team_colors):
             continue
 
         # ----------------------------
-        # Bar width scaling (minutes)
+        # Bar width scaling
         # ----------------------------
-        min_width_min = 0.1  # ~6 seconds minimum visibility
+        min_width_min = 0.1
         scaled_widths = runs_df["Run Duration"].clip(lower=min_width_min)
 
         # ----------------------------

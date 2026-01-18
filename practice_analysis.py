@@ -67,58 +67,59 @@ def get_longest_stints(df):
 
     longest_runs = []
 
-    for car_number, group in df.groupby("NUMBER"):
-        # Sort by PRACTICE_SESSION and LAP_NUMBER for proper sequence
-        if "LAP_NUMBER" in group.columns:
-            group = group.sort_values(["PRACTICE_SESSION", "LAP_NUMBER"]).reset_index(drop=True)
-        else:
-            group = group.sort_values("PRACTICE_SESSION").reset_index(drop=True)
-
+    for car_number, car_group in df.groupby("NUMBER"):
         max_stint = []
         max_stint_session = None
         max_stint_len = 0
 
-        current_stint = []
-        current_stint_session = None
+        # Group by session within car
+        for session_name, session_group in car_group.groupby("PRACTICE_SESSION"):
+            # Sort by LAP_NUMBER for proper sequence
+            if "LAP_NUMBER" in session_group.columns:
+                session_group = session_group.sort_values("LAP_NUMBER").reset_index(drop=True)
+            else:
+                session_group = session_group.reset_index(drop=True)
 
-        skip_next = False  # to skip lap after 'B' lap (in-lap)
+            current_stint = []
+            current_stint_session = None
+            skip_next = False  # to skip lap after 'B' lap (in-lap)
 
-        for idx, row in group.iterrows():
-            if skip_next:
-                # Skip the in-lap right after a 'B' lap
-                skip_next = False
-                continue
+            for idx, row in session_group.iterrows():
+                if skip_next:
+                    # Skip the in-lap right after a 'B' lap
+                    skip_next = False
+                    continue
 
-            crossing_pit = str(row.get("CROSSING_FINISH_LINE_IN_PIT", "")).strip().upper() == "B"
+                crossing_pit = str(row.get("CROSSING_FINISH_LINE_IN_PIT", "")).strip().upper() == "B"
 
-            if crossing_pit:
-                # End current stint at previous lap (exclude this pit lap and previous lap)
-                if current_stint:
-                    # Remove last lap from current_stint (the out-lap before pit)
-                    if len(current_stint) > 0:
-                        current_stint = current_stint[:-1]
+                if crossing_pit:
+                    # End current stint at previous lap (exclude this pit lap and previous lap)
+                    if current_stint:
+                        # Remove last lap from current_stint (the out-lap before pit)
+                        if len(current_stint) > 0:
+                            current_stint = current_stint[:-1]
 
-                    if len(current_stint) > max_stint_len:
-                        max_stint = current_stint
-                        max_stint_session = current_stint_session
-                        max_stint_len = len(current_stint)
+                        if len(current_stint) > max_stint_len:
+                            max_stint = current_stint
+                            max_stint_session = session_name
+                            max_stint_len = len(current_stint)
 
-                current_stint = []
-                current_stint_session = None
-                skip_next = True  # skip next lap (in-lap)
-                continue
+                    current_stint = []
+                    current_stint_session = None
+                    skip_next = True  # skip next lap (in-lap)
+                    continue
 
-            # Add laps to current stint only if not out-lap or in-lap
-            if not current_stint:
-                current_stint_session = row["PRACTICE_SESSION"]
+                # Add laps to current stint only if not out-lap or in-lap
+                if not current_stint:
+                    current_stint_session = session_name
 
-            current_stint.append(row)
+                current_stint.append(row)
 
-        # Final check after loop
-        if current_stint and len(current_stint) > max_stint_len:
-            max_stint = current_stint
-            max_stint_session = current_stint_session
-            max_stint_len = len(current_stint)
+            # Final check after loop for this session
+            if current_stint and len(current_stint) > max_stint_len:
+                max_stint = current_stint
+                max_stint_session = session_name
+                max_stint_len = len(current_stint)
 
         if not max_stint:
             continue
@@ -127,7 +128,7 @@ def get_longest_stints(df):
 
         # Prepare data for output
         lap_times = stint_df["LAP_TIME_SECONDS"].tolist()
-        lap_numbers = stint_df["LAP_NUMBER"].tolist() if "LAP_NUMBER" in stint_df.columns else list(range(1, len(lap_times)+1))
+        lap_numbers = stint_df["LAP_NUMBER"].tolist() if "LAP_NUMBER" in stint_df.columns else list(range(1, len(lap_times) + 1))
         avg_lap_time = sum(lap_times) / len(lap_times) if lap_times else None
 
         team = stint_df.iloc[0]["TEAM"] if "TEAM" in stint_df.columns else ""

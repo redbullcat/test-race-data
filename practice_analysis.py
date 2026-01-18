@@ -28,34 +28,43 @@ def show_practice_analysis(
         st.error("Data directory not found.")
         return
 
-    # --- Discover practice and test sessions ---
+    # Check if main race CSV file exists for this event
+    main_race_file = os.path.join(base_path, f"{race}.csv")
+    main_race_exists = os.path.isfile(main_race_file)
+
     practice_files = {}
 
-    for filename in os.listdir(base_path):
-        if not filename.lower().startswith(race.lower()):
-            continue
-
-        match_practice = PRACTICE_PATTERN.search(filename)
-        match_session = SESSION_PATTERN.search(filename)
-
-        if match_practice:
-            session_number = int(match_practice.group(1))
-            label = f"Practice {session_number}"
-            practice_files[label] = os.path.join(base_path, filename)
-
-        elif match_session:
-            session_number = int(match_session.group(1))
-            label = f"Session {session_number}"
-            practice_files[label] = os.path.join(base_path, filename)
+    # If race file exists, use practice sessions (_practice#)
+    # If race file does NOT exist, treat _session# files as practice sessions
+    if main_race_exists:
+        # Load _practice# files only
+        for filename in os.listdir(base_path):
+            if not filename.lower().startswith(race.lower()):
+                continue
+            match = PRACTICE_PATTERN.search(filename)
+            if match:
+                session_number = int(match.group(1))
+                label = f"Practice {session_number}"
+                practice_files[label] = os.path.join(base_path, filename)
+    else:
+        # No main race file - load _session# files instead, treat as practice sessions
+        for filename in os.listdir(base_path):
+            if not filename.lower().startswith(race.lower()):
+                continue
+            match = SESSION_PATTERN.search(filename)
+            if match:
+                session_number = int(match.group(1))
+                label = f"Session {session_number}"
+                practice_files[label] = os.path.join(base_path, filename)
 
     if not practice_files:
         st.warning("No practice/test session files found for this event.")
         return
 
-    # Sort session labels by type and number (Practice before Session, then numeric order)
+    # Sort session labels by number
     available_sessions = sorted(
         practice_files.keys(),
-        key=lambda x: (x.split()[0], int(re.search(r'\d+', x).group()))
+        key=lambda x: int(re.search(r'\d+', x).group())
     )
 
     # --- Session selection UI ---

@@ -3,6 +3,19 @@ import plotly.express as px
 import streamlit as st
 
 
+def parse_hour_time(series: pd.Series) -> pd.Series:
+    """
+    Parse HOUR column (hh:mm:ss.000) into datetime and handle midnight rollover.
+    """
+    dt = pd.to_datetime(series, format="%H:%M:%S.%f", errors="coerce")
+
+    # Handle midnight rollover (session crossing midnight)
+    rollover = dt.diff().dt.total_seconds() < -12 * 3600
+    dt += pd.to_timedelta(rollover.cumsum(), unit="D")
+
+    return dt
+
+
 def show_practice_team_run_analysis(df, team_colors):
     st.subheader("Team Run Analysis by Session")
 
@@ -27,13 +40,14 @@ def show_practice_team_run_analysis(df, team_colors):
 
     team_df = class_df[class_df["TEAM"] == selected_team]
 
-    # Add car dropdown filter (only if multiple cars)
+    # Car selector (always shown, but meaningful only if >1 car)
     cars = sorted(team_df["NUMBER"].dropna().unique().tolist())
     selected_car = st.selectbox(
         "Select Car:",
         options=cars,
         key="team_run_car_filter"
     )
+
     team_df = team_df[team_df["NUMBER"] == selected_car]
 
     if team_df.empty:
@@ -41,22 +55,10 @@ def show_practice_team_run_analysis(df, team_colors):
         return
 
     # ----------------------------
-    # ELAPSED → seconds conversion
+    # Canonical session clock from HOUR
     # ----------------------------
-    def elapsed_to_seconds(x):
-        try:
-            parts = str(x).split(":")
-            if len(parts) == 2:
-                mins, secs = parts
-                return int(mins) * 60 + float(secs)
-            elif len(parts) == 3:
-                hrs, mins, secs = parts
-                return int(hrs) * 3600 + int(mins) * 60 + float(secs)
-        except Exception:
-            return None
-
-    team_df["ELAPSED_SECONDS"] = team_df["ELAPSED"].apply(elapsed_to_seconds)
-    team_df = team_df.dropna(subset=["ELAPSED_SECONDS"])
+    team_df["HOUR_DT"] = parse_hour_time(team_df["HOUR"])
+    team_df = team_df.dropna(subset=["HOUR_DT"])
 
     # ----------------------------
     # Per-session charts
@@ -64,9 +66,13 @@ def show_practice_team_run_analysis(df, team_colors):
     for session_name, session_df in team_df.groupby("PRACTICE_SESSION"):
         st.markdown(f"### {session_name}")
 
-        # True session duration (on-track)
-        session_duration_sec = session_df["ELAPSED_SECONDS"].max()
-        session_duration_min = session_duration_sec / 60
+        # Session-global start/end based on HOUR
+        session_start_dt = session_df["HOUR_DT"].min()
+        session_end_dt = session_df["HOUR_DT"].max()
+
+        session_duration_min = (
+            (session_end_dt - session_start_dt).total_seconds() / 60
+        )
 
         runs = []
 
@@ -102,14 +108,21 @@ def show_practice_team_run_analysis(df, team_colors):
         for run in runs:
             run_df = pd.DataFrame(run)
 
-            start_time_sec = run_df["ELAPSED_SECONDS"].min()
-            end_time_sec = run_df["ELAPSED_SECONDS"].max()
-            duration_sec = end_time_sec - start_time_sec
+            run_start_dt = run_df["HOUR_DT"].min()
+            run_end_dt = run_df["HOUR_DT"].max()
+
+            start_time_min = (
+                (run_start_dt - session_start_dt).total_seconds() / 60
+            )
+            duration_min = (
+                (run_end_dt - run_start_dt).total_seconds() / 60
+            )
+
             lap_count = len(run_df)
 
             run_rows.append({
-                "Run Start": start_time_sec / 60,      # Convert to minutes for x axis
-                "Run Duration": duration_sec / 60,     # Convert to minutes for bar width
+                "Run Start": start_time_min,
+                "Run Duration": duration_min,
                 "Laps": lap_count,
                 "Car": run_df.iloc[0]["NUMBER"],
             })
@@ -121,9 +134,9 @@ def show_practice_team_run_analysis(df, team_colors):
             continue
 
         # ----------------------------
-        # Scale bar widths to x axis units (minutes)
+        # Bar width scaling (minutes)
         # ----------------------------
-        min_width_min = 0.1  # Minimum bar width in minutes (~6 seconds)
+        min_width_min = 0.1  # ~6 seconds minimum visibility
         scaled_widths = runs_df["Run Duration"].clip(lower=min_width_min)
 
         # ----------------------------

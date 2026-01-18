@@ -28,7 +28,7 @@ def show_practice_analysis(
         st.error("Data directory not found.")
         return
 
-    # --- Discover practice and session files ---
+    # --- Discover practice and test sessions ---
     practice_files = {}
 
     for filename in os.listdir(base_path):
@@ -40,16 +40,23 @@ def show_practice_analysis(
 
         if match_practice:
             session_number = int(match_practice.group(1))
-            practice_files[session_number] = os.path.join(base_path, filename)
+            label = f"Practice {session_number}"
+            practice_files[label] = os.path.join(base_path, filename)
+
         elif match_session:
             session_number = int(match_session.group(1))
-            practice_files[session_number] = os.path.join(base_path, filename)
+            label = f"Session {session_number}"
+            practice_files[label] = os.path.join(base_path, filename)
 
     if not practice_files:
         st.warning("No practice/test session files found for this event.")
         return
 
-    available_sessions = sorted(practice_files.keys())
+    # Sort session labels by type and number (Practice before Session, then numeric order)
+    available_sessions = sorted(
+        practice_files.keys(),
+        key=lambda x: (x.split()[0], int(re.search(r'\d+', x).group()))
+    )
 
     # --- Session selection UI ---
     st.markdown("### Session Selection")
@@ -58,14 +65,14 @@ def show_practice_analysis(
 
     selected_sessions = []
 
-    for session in available_sessions:
+    for label in available_sessions:
         checked = st.checkbox(
-            f"Practice {session}",
+            label,
             value=all_sessions_selected,
             disabled=all_sessions_selected
         )
         if checked:
-            selected_sessions.append(session)
+            selected_sessions.append(label)
 
     if not selected_sessions:
         st.warning("No sessions selected.")
@@ -74,15 +81,16 @@ def show_practice_analysis(
     # --- Load selected sessions ---
     session_dfs = []
 
-    for session in selected_sessions:
+    for label in selected_sessions:
+        filepath = practice_files[label]
         try:
-            df_session = pd.read_csv(practice_files[session], delimiter=";")
+            df_session = pd.read_csv(filepath, delimiter=";")
         except Exception as e:
-            st.error(f"Failed to load Practice {session}: {e}")
+            st.error(f"Failed to load {label}: {e}")
             return
 
         df_session.columns = df_session.columns.str.strip()
-        df_session["PRACTICE_SESSION"] = f"Practice {session}"
+        df_session["PRACTICE_SESSION"] = label
 
         session_dfs.append(df_session)
 

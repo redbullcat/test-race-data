@@ -27,22 +27,17 @@ def show_practice_team_run_analysis(df, team_colors):
 
     team_df = class_df[class_df["TEAM"] == selected_team]
 
-    if team_df.empty:
-        st.warning("No data available for the selected team.")
-        return
-
-    # Third dropdown: individual car selection
+    # Add car dropdown filter (only if multiple cars)
     cars = sorted(team_df["NUMBER"].dropna().unique().tolist())
     selected_car = st.selectbox(
         "Select Car:",
         options=cars,
         key="team_run_car_filter"
     )
+    team_df = team_df[team_df["NUMBER"] == selected_car]
 
-    car_df = team_df[team_df["NUMBER"] == selected_car]
-
-    if car_df.empty:
-        st.warning("No data available for the selected car.")
+    if team_df.empty:
+        st.warning("No data available for the selected team and car.")
         return
 
     # ----------------------------
@@ -60,41 +55,43 @@ def show_practice_team_run_analysis(df, team_colors):
         except Exception:
             return None
 
-    car_df["ELAPSED_SECONDS"] = car_df["ELAPSED"].apply(elapsed_to_seconds)
-    car_df = car_df.dropna(subset=["ELAPSED_SECONDS"])
+    team_df["ELAPSED_SECONDS"] = team_df["ELAPSED"].apply(elapsed_to_seconds)
+    team_df = team_df.dropna(subset=["ELAPSED_SECONDS"])
 
     # ----------------------------
     # Per-session charts
     # ----------------------------
-    for session_name, session_df in car_df.groupby("PRACTICE_SESSION"):
+    for session_name, session_df in team_df.groupby("PRACTICE_SESSION"):
         st.markdown(f"### {session_name}")
 
         # True session duration (on-track)
-        session_duration = session_df["ELAPSED_SECONDS"].max()
+        session_duration_sec = session_df["ELAPSED_SECONDS"].max()
+        session_duration_min = session_duration_sec / 60
 
         runs = []
 
-        session_df = session_df.sort_values("LAP_NUMBER").reset_index(drop=True)
+        for car_number, car_df in session_df.groupby("NUMBER"):
+            car_df = car_df.sort_values("LAP_NUMBER").reset_index(drop=True)
 
-        current_run = []
-        skip_next = False
+            current_run = []
+            skip_next = False
 
-        for _, row in session_df.iterrows():
-            if skip_next:
-                skip_next = False
-                continue
+            for _, row in car_df.iterrows():
+                if skip_next:
+                    skip_next = False
+                    continue
 
-            if str(row.get("CROSSING_FINISH_LINE_IN_PIT", "")).strip().upper() == "B":
-                if current_run:
-                    runs.append(current_run)
-                    current_run = []
-                skip_next = True
-                continue
+                if str(row.get("CROSSING_FINISH_LINE_IN_PIT", "")).strip().upper() == "B":
+                    if current_run:
+                        runs.append(current_run)
+                        current_run = []
+                    skip_next = True
+                    continue
 
-            current_run.append(row)
+                current_run.append(row)
 
-        if current_run:
-            runs.append(current_run)
+            if current_run:
+                runs.append(current_run)
 
         if not runs:
             st.info("No valid runs found in this session.")
@@ -105,14 +102,14 @@ def show_practice_team_run_analysis(df, team_colors):
         for run in runs:
             run_df = pd.DataFrame(run)
 
-            start_time = run_df["ELAPSED_SECONDS"].min()
-            end_time = run_df["ELAPSED_SECONDS"].max()
-            duration = end_time - start_time
+            start_time_sec = run_df["ELAPSED_SECONDS"].min()
+            end_time_sec = run_df["ELAPSED_SECONDS"].max()
+            duration_sec = end_time_sec - start_time_sec
             lap_count = len(run_df)
 
             run_rows.append({
-                "Run Start": start_time,
-                "Run Duration": duration,
+                "Run Start": start_time_sec / 60,      # Convert to minutes for x axis
+                "Run Duration": duration_sec / 60,     # Convert to minutes for bar width
                 "Laps": lap_count,
                 "Car": run_df.iloc[0]["NUMBER"],
             })
@@ -123,13 +120,11 @@ def show_practice_team_run_analysis(df, team_colors):
             st.info("No plottable runs in this session.")
             continue
 
-        # --- Scale bar widths to run durations ---
-        max_pixel_width = 300
-        max_duration = runs_df["Run Duration"].max()
-        scale_factor = max_pixel_width / max_duration if max_duration > 0 else 1
-        scaled_widths = runs_df["Run Duration"] * scale_factor
-        min_pixel_width = 10
-        scaled_widths = scaled_widths.clip(lower=min_pixel_width)
+        # ----------------------------
+        # Scale bar widths to x axis units (minutes)
+        # ----------------------------
+        min_width_min = 0.1  # Minimum bar width in minutes (~6 seconds)
+        scaled_widths = runs_df["Run Duration"].clip(lower=min_width_min)
 
         # ----------------------------
         # Plot
@@ -148,14 +143,14 @@ def show_practice_team_run_analysis(df, team_colors):
                 "Car: %{customdata[0]}<br>"
                 "Laps: %{y}<br>"
                 "Start: %{x:.2f} min<br>"
-                "Duration: %{customdata[1]:.2f} s"
+                "Duration: %{customdata[1]:.2f} min"
             ),
             customdata=runs_df[["Car", "Run Duration"]].values,
         )
 
         fig.update_xaxes(
             title="Session Time (minutes)",
-            range=[0, session_duration / 60]  # convert seconds to minutes
+            range=[0, session_duration_min]
         )
 
         fig.update_yaxes(

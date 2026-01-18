@@ -86,3 +86,22 @@ def show_practice_long_runs(longest_stints_df, team_colors):
     )
 
     st.plotly_chart(fig, use_container_width=True)
+
+    # --- Debug: Show raw data table below the chart ---
+    st.markdown("#### Raw Data for Longest Stints")
+
+    # Prepare table data
+    table_data = []
+    for _, row in filtered_df.iterrows():
+        table_data.append({
+            "Car": row["Car"],
+            "Team": row["Team"],
+            "Manufacturer": row["Manufacturer"],
+            "Class": row["Class"],
+            "Lap Numbers": ", ".join(str(ln) for ln in row["Lap_Numbers"]),
+            "Lap Times (s)": ", ".join(f"{lt:.3f}" for lt in row["Lap_Times"])
+        })
+
+    debug_df = pd.DataFrame(table_data)
+
+    st.dataframe(debug_df, use_container_width=True)

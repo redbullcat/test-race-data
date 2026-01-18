@@ -28,44 +28,40 @@ def show_practice_analysis(
         st.error("Data directory not found.")
         return
 
-    # Check if main race CSV file exists for this event
-    main_race_file = os.path.join(base_path, f"{race}.csv")
-    main_race_exists = os.path.isfile(main_race_file)
-
+    # --- Discover practice and session files ---
     practice_files = {}
+    session_files = {}
 
-    # If race file exists, use practice sessions (_practice#)
-    # If race file does NOT exist, treat _session# files as practice sessions
-    if main_race_exists:
-        # Load _practice# files only
-        for filename in os.listdir(base_path):
-            if not filename.lower().startswith(race.lower()):
-                continue
-            match = PRACTICE_PATTERN.search(filename)
-            if match:
-                session_number = int(match.group(1))
-                label = f"Practice {session_number}"
-                practice_files[label] = os.path.join(base_path, filename)
+    race_lower = race.lower()
+
+    for filename in os.listdir(base_path):
+        filename_lower = filename.lower()
+
+        if not filename_lower.startswith(race_lower):
+            continue
+
+        match_practice = PRACTICE_PATTERN.search(filename_lower)
+        if match_practice:
+            session_number = int(match_practice.group(1))
+            practice_files[session_number] = os.path.join(base_path, filename)
+            continue
+
+        match_session = SESSION_PATTERN.search(filename_lower)
+        if match_session:
+            session_number = int(match_session.group(1))
+            session_files[session_number] = os.path.join(base_path, filename)
+            continue
+
+    # Use practice files if found, else session files
+    if practice_files:
+        available_sessions = sorted(practice_files.keys())
+        files_to_load = practice_files
+    elif session_files:
+        available_sessions = sorted(session_files.keys())
+        files_to_load = session_files
     else:
-        # No main race file - load _session# files instead, treat as practice sessions
-        for filename in os.listdir(base_path):
-            if not filename.lower().startswith(race.lower()):
-                continue
-            match = SESSION_PATTERN.search(filename)
-            if match:
-                session_number = int(match.group(1))
-                label = f"Session {session_number}"
-                practice_files[label] = os.path.join(base_path, filename)
-
-    if not practice_files:
         st.warning("No practice/test session files found for this event.")
         return
-
-    # Sort session labels by number
-    available_sessions = sorted(
-        practice_files.keys(),
-        key=lambda x: int(re.search(r'\d+', x).group())
-    )
 
     # --- Session selection UI ---
     st.markdown("### Session Selection")
@@ -74,14 +70,14 @@ def show_practice_analysis(
 
     selected_sessions = []
 
-    for label in available_sessions:
+    for session in available_sessions:
         checked = st.checkbox(
-            label,
+            f"Session {session}",
             value=all_sessions_selected,
             disabled=all_sessions_selected
         )
         if checked:
-            selected_sessions.append(label)
+            selected_sessions.append(session)
 
     if not selected_sessions:
         st.warning("No sessions selected.")
@@ -90,16 +86,15 @@ def show_practice_analysis(
     # --- Load selected sessions ---
     session_dfs = []
 
-    for label in selected_sessions:
-        filepath = practice_files[label]
+    for session in selected_sessions:
         try:
-            df_session = pd.read_csv(filepath, delimiter=";")
+            df_session = pd.read_csv(files_to_load[session], delimiter=";")
         except Exception as e:
-            st.error(f"Failed to load {label}: {e}")
+            st.error(f"Failed to load Session {session}: {e}")
             return
 
         df_session.columns = df_session.columns.str.strip()
-        df_session["PRACTICE_SESSION"] = label
+        df_session["PRACTICE_SESSION"] = f"Session {session}"
 
         session_dfs.append(df_session)
 

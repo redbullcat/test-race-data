@@ -7,6 +7,7 @@ from practice_fastest_laps_table import show_practice_fastest_laps
 from practice_pace_chart import show_practice_pace_chart
 from practice_long_runs import show_practice_long_runs
 from practice_fastest_runs import show_practice_fastest_runs
+from practice_team_run_analysis import show_practice_team_run_analysis
 
 PRACTICE_PATTERN = re.compile(r"_practice(\d+)\.csv$", re.IGNORECASE)
 SESSION_PATTERN = re.compile(r"_session(\d+)\.csv$", re.IGNORECASE)
@@ -146,3 +147,4 @@ def show_practice_analysis(
     show_practice_pace_chart(df, team_colors)
     show_practice_long_runs(df, team_colors)
     show_practice_fastest_runs(df, team_colors)
+    show_practice_team_run_analysis(df, team_colors)

@@ -161,7 +161,7 @@ def show_practice_team_run_analysis(df, team_colors):
             plot_bgcolor="#2b2b2b",
             paper_bgcolor="#2b2b2b",
             font=dict(color="white", size=14),
-            showlegend=True,
+            showlegend=False,
         )
 
         st.plotly_chart(fig, use_container_width=True)

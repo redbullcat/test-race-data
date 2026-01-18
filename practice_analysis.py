@@ -39,7 +39,8 @@ def parse_elapsed_to_seconds(x):
 
 def get_longest_stints(df):
     """
-    Calculate the longest no-pit stint per car across all sessions.
+    Calculate the longest no-pit stint per car across all sessions,
+    excluding out-laps and in-laps defined by laps crossing finish line in pits ('B').
 
     Returns a DataFrame with columns:
     - Car
@@ -77,22 +78,34 @@ def get_longest_stints(df):
         max_stint_session = None
         current_stint = []
         current_stint_session = None
-        skip_next = False  # skip lap after pit (out lap)
+
+        skip_next = False  # to skip lap after 'B' lap (in-lap)
 
         for idx, row in group.iterrows():
             if skip_next:
+                # Skip the in-lap right after a 'B' lap
                 skip_next = False
                 continue
 
-            if str(row.get("CROSSING_FINISH_LINE_IN_PIT", "")).strip().upper() == "B":
-                if current_stint and len(current_stint) > len(max_stint):
-                    max_stint = current_stint
-                    max_stint_session = current_stint_session
+            crossing_pit = str(row.get("CROSSING_FINISH_LINE_IN_PIT", "")).strip().upper() == "B"
+
+            if crossing_pit:
+                # End current stint at previous lap (exclude this pit lap and previous lap)
+                if current_stint:
+                    # Remove last lap from current_stint (the out-lap before pit)
+                    if len(current_stint) > 0:
+                        current_stint = current_stint[:-1]
+
+                    if len(current_stint) > len(max_stint):
+                        max_stint = current_stint
+                        max_stint_session = current_stint_session
+
                 current_stint = []
                 current_stint_session = None
-                skip_next = True
+                skip_next = True  # skip next lap (in-lap)
                 continue
 
+            # Add laps to current stint only if not out-lap or in-lap
             if not current_stint:
                 current_stint_session = row["PRACTICE_SESSION"]
 

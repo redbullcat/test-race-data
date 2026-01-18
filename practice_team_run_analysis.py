@@ -31,6 +31,20 @@ def show_practice_team_run_analysis(df, team_colors):
         st.warning("No data available for the selected team.")
         return
 
+    # Third dropdown: individual car selection
+    cars = sorted(team_df["NUMBER"].dropna().unique().tolist())
+    selected_car = st.selectbox(
+        "Select Car:",
+        options=cars,
+        key="team_run_car_filter"
+    )
+
+    car_df = team_df[team_df["NUMBER"] == selected_car]
+
+    if car_df.empty:
+        st.warning("No data available for the selected car.")
+        return
+
     # ----------------------------
     # ELAPSED → seconds conversion
     # ----------------------------
@@ -46,13 +60,13 @@ def show_practice_team_run_analysis(df, team_colors):
         except Exception:
             return None
 
-    team_df["ELAPSED_SECONDS"] = team_df["ELAPSED"].apply(elapsed_to_seconds)
-    team_df = team_df.dropna(subset=["ELAPSED_SECONDS"])
+    car_df["ELAPSED_SECONDS"] = car_df["ELAPSED"].apply(elapsed_to_seconds)
+    car_df = car_df.dropna(subset=["ELAPSED_SECONDS"])
 
     # ----------------------------
     # Per-session charts
     # ----------------------------
-    for session_name, session_df in team_df.groupby("PRACTICE_SESSION"):
+    for session_name, session_df in car_df.groupby("PRACTICE_SESSION"):
         st.markdown(f"### {session_name}")
 
         # True session duration (on-track)
@@ -60,28 +74,27 @@ def show_practice_team_run_analysis(df, team_colors):
 
         runs = []
 
-        for car_number, car_df in session_df.groupby("NUMBER"):
-            car_df = car_df.sort_values("LAP_NUMBER").reset_index(drop=True)
+        session_df = session_df.sort_values("LAP_NUMBER").reset_index(drop=True)
 
-            current_run = []
-            skip_next = False
+        current_run = []
+        skip_next = False
 
-            for _, row in car_df.iterrows():
-                if skip_next:
-                    skip_next = False
-                    continue
+        for _, row in session_df.iterrows():
+            if skip_next:
+                skip_next = False
+                continue
 
-                if str(row.get("CROSSING_FINISH_LINE_IN_PIT", "")).strip().upper() == "B":
-                    if current_run:
-                        runs.append(current_run)
-                        current_run = []
-                    skip_next = True
-                    continue
+            if str(row.get("CROSSING_FINISH_LINE_IN_PIT", "")).strip().upper() == "B":
+                if current_run:
+                    runs.append(current_run)
+                    current_run = []
+                skip_next = True
+                continue
 
-                current_run.append(row)
+            current_run.append(row)
 
-            if current_run:
-                runs.append(current_run)
+        if current_run:
+            runs.append(current_run)
 
         if not runs:
             st.info("No valid runs found in this session.")
@@ -134,15 +147,15 @@ def show_practice_team_run_analysis(df, team_colors):
             hovertemplate=(
                 "Car: %{customdata[0]}<br>"
                 "Laps: %{y}<br>"
-                "Start: %{x:.1f}s<br>"
-                "Duration: %{customdata[1]:.1f}s"
+                "Start: %{x:.2f} min<br>"
+                "Duration: %{customdata[1]:.2f} s"
             ),
             customdata=runs_df[["Car", "Run Duration"]].values,
         )
 
         fig.update_xaxes(
-            title="Session Time (seconds)",
-            range=[0, session_duration]
+            title="Session Time (minutes)",
+            range=[0, session_duration / 60]  # convert seconds to minutes
         )
 
         fig.update_yaxes(

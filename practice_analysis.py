@@ -51,6 +51,8 @@ def get_longest_stints(df):
     - Lap_Numbers (list)
     - Lap_Times (list of seconds)
     - Stint_Length
+    - Average_Lap_Time_Seconds
+    - Average_20_Percent_Pace
     - Session
     """
     # Ensure LAP_TIME_SECONDS exists
@@ -131,6 +133,11 @@ def get_longest_stints(df):
         lap_numbers = stint_df["LAP_NUMBER"].tolist() if "LAP_NUMBER" in stint_df.columns else list(range(1, len(lap_times) + 1))
         avg_lap_time = sum(lap_times) / len(lap_times) if lap_times else None
 
+        # Calculate average 20% pace (fastest 20% laps average)
+        lap_times_sorted = sorted(lap_times)
+        top_20_count = max(1, int(len(lap_times_sorted) * 0.2))
+        avg_20_pace = sum(lap_times_sorted[:top_20_count]) / top_20_count if lap_times_sorted else None
+
         team = stint_df.iloc[0]["TEAM"] if "TEAM" in stint_df.columns else ""
         manufacturer = stint_df.iloc[0]["MANUFACTURER"] if "MANUFACTURER" in stint_df.columns else ""
         race_class = stint_df.iloc[0]["CLASS"] if "CLASS" in stint_df.columns else ""
@@ -147,6 +154,7 @@ def get_longest_stints(df):
             "Lap_Numbers": lap_numbers,
             "Lap_Times": lap_times,
             "Average_Lap_Time_Seconds": avg_lap_time,
+            "Average_20_Percent_Pace": avg_20_pace,
             "Stint_Length": len(lap_times),
             "Session": max_stint_session
         })

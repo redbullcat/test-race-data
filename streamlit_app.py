@@ -17,8 +17,47 @@ from practice_analysis import show_practice_analysis
 # --- Load available race data ---
 DATA_DIR = "data"
 
-# Structure: { year: { series: [races] } }
+# Structure: { year: { series: [events] } }
 race_files = {}
+
+def get_event_names(path):
+    files = os.listdir(path)
+    events = set()
+
+    # Patterns to detect events
+    race_main_re = re.compile(r"^(.+)\.csv$", re.IGNORECASE)
+    practice_re = re.compile(r"^(.+)_practice\d+\.csv$", re.IGNORECASE)
+    session_re = re.compile(r"^(.+)_session\d+\.csv$", re.IGNORECASE)
+
+    race_main_events = set()
+    session_events = set()
+
+    for f in files:
+        # Skip non-csv files
+        if not f.lower().endswith(".csv"):
+            continue
+
+        m_main = race_main_re.match(f)
+        m_practice = practice_re.match(f)
+        m_session = session_re.match(f)
+
+        if m_main:
+            event_name = m_main.group(1).lower()
+            race_main_events.add(event_name)
+            events.add(event_name)
+        elif m_practice:
+            event_name = m_practice.group(1).lower()
+            session_events.add(event_name)
+        elif m_session:
+            event_name = m_session.group(1).lower()
+            session_events.add(event_name)
+
+    # Add session-only events that don't have main CSV
+    for ev in session_events:
+        if ev not in race_main_events:
+            events.add(ev)
+
+    return sorted(events)
 
 for year in sorted(os.listdir(DATA_DIR)):
     year_path = os.path.join(DATA_DIR, year)
@@ -32,14 +71,9 @@ for year in sorted(os.listdir(DATA_DIR)):
         if not os.path.isdir(series_path):
             continue
 
-        csv_files = [
-            f.replace(".csv", "")
-            for f in os.listdir(series_path)
-            if f.endswith(".csv")
-        ]
-
-        if csv_files:
-            series_dict[series] = sorted(csv_files)
+        events = get_event_names(series_path)
+        if events:
+            series_dict[series] = sorted(events)
 
     if series_dict:
         race_files[year] = series_dict

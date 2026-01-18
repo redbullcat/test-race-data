@@ -3,7 +3,7 @@ import plotly.express as px
 import streamlit as st
 
 def show_practice_long_runs(df, team_colors):
-    st.subheader("Longest Run Average Lap Time by Car")
+    st.subheader("Longest Run Average Pace by Car")
 
     # --- Classes filter ---
     classes = df["CLASS"].dropna().unique().tolist()
@@ -11,7 +11,7 @@ def show_practice_long_runs(df, team_colors):
         "Select Class(es):",
         options=classes,
         default=classes,
-        key="practice_longrun_class_filter"
+        key="practice_long_runs_class_filter"
     )
 
     filtered_df = df[df["CLASS"].isin(selected_classes)]
@@ -22,7 +22,7 @@ def show_practice_long_runs(df, team_colors):
         "Select Car(s):",
         options=available_cars,
         default=available_cars,
-        key="practice_longrun_car_filter"
+        key="practice_long_runs_car_filter"
     )
 
     # --- Top lap % slider ---
@@ -32,7 +32,7 @@ def show_practice_long_runs(df, team_colors):
         100,
         100,
         step=20,
-        key="practice_longrun_top_lap_filter",
+        key="practice_long_runs_top_lap_filter",
         help="Use 0% to hide all data."
     )
 
@@ -41,9 +41,9 @@ def show_practice_long_runs(df, team_colors):
         return
 
     # --- Filter by selected classes and cars ---
-    filtered_df = filtered_df[filtered_df["NUMBER"].isin(selected_cars)].copy()
+    filtered_df = filtered_df[filtered_df["NUMBER"].isin(selected_cars)]
 
-    # --- Lap time conversion function ---
+    # --- Convert LAP_TIME to seconds ---
     def lap_to_seconds(x):
         try:
             mins, secs = x.split(":")
@@ -54,100 +54,117 @@ def show_practice_long_runs(df, team_colors):
     filtered_df["LAP_TIME_SECONDS"] = filtered_df["LAP_TIME"].apply(lap_to_seconds)
     filtered_df = filtered_df.dropna(subset=["LAP_TIME_SECONDS"])
 
-    # --- Function to find longest no-pit run for a car ---
-    def longest_no_pit_run_laps(car_df):
-        car_df = car_df.sort_values("LAP_NUMBER").reset_index(drop=True)
+    # --- Filter top X% fastest laps per car ---
+    def filter_top_percent_laps(df, percent):
+        filtered_dfs = []
+        for car_number, group in df.groupby("NUMBER"):
+            group_sorted = group.sort_values("LAP_TIME_SECONDS")
+            n_laps = len(group_sorted)
+            n_keep = max(1, int(n_laps * percent / 100))
+            filtered_dfs.append(group_sorted.head(n_keep))
+        return pd.concat(filtered_dfs)
 
-        # Identify pit laps: 'B' in CROSSING_FINISH_LINE_IN_PIT means pit lap
-        pit_indices = car_df.index[car_df["CROSSING_FINISH_LINE_IN_PIT"] == "B"].tolist()
+    filtered_df = filter_top_percent_laps(filtered_df, top_percent)
 
-        # Runs are sequences between pit laps, excluding pit lap and the following lap (out lap)
-        excluded_indices = set()
-        for idx in pit_indices:
-            excluded_indices.add(idx)  # Pit lap
-            if idx + 1 < len(car_df):
-                excluded_indices.add(idx + 1)  # Out lap
-
-        # Build runs by splitting laps excluding excluded_indices
-        runs = []
-        current_run = []
-        for i in range(len(car_df)):
-            if i in excluded_indices:
-                # End current run if exists
-                if current_run:
-                    runs.append(current_run)
-                    current_run = []
-            else:
-                current_run.append(i)
-        # Add last run
-        if current_run:
-            runs.append(current_run)
-
-        if not runs:
-            return pd.DataFrame()  # No valid runs
-
-        # Find longest run (max laps)
-        longest_run_indices = max(runs, key=len)
-
-        # Return subset of car_df for longest run laps
-        return car_df.loc[longest_run_indices]
-
-    # --- Find longest runs for each car ---
+    # --- Find longest no-pit stint per car ---
+    # Pits indicated by 'B' in CROSSING_FINISH_LINE_IN_PIT
     longest_runs = []
-    for car_number, group in filtered_df.groupby("NUMBER"):
-        longest_run_df = longest_no_pit_run_laps(group)
-        if not longest_run_df.empty:
-            # Filter top X% laps in longest run by lap time
-            n_laps = len(longest_run_df)
-            n_keep = max(1, int(n_laps * top_percent / 100))
-            longest_run_df_sorted = longest_run_df.sort_values("LAP_TIME_SECONDS")
-            top_laps_df = longest_run_df_sorted.head(n_keep)
-            # Average lap time over these laps
-            avg_lap_time = top_laps_df["LAP_TIME_SECONDS"].mean()
-            team = top_laps_df["TEAM"].iloc[0] if "TEAM" in top_laps_df.columns else "Unknown"
-            car_class = top_laps_df["CLASS"].iloc[0] if "CLASS" in top_laps_df.columns else "Unknown"
 
-            longest_runs.append({
-                "NUMBER": car_number,
-                "TEAM": team,
-                "CLASS": car_class,
-                "AVG_LAP_TIME_SECONDS": avg_lap_time
-            })
+    for car_number, group in filtered_df.groupby("NUMBER"):
+        group = group.sort_values("LAP_NUMBER").reset_index(drop=True)
+
+        max_stint = []
+        max_stint_laps = []
+        current_stint = []
+        skip_next = False  # Skip the lap after pit (out lap)
+
+        for idx, row in group.iterrows():
+            if skip_next:
+                skip_next = False
+                continue
+
+            # If pit lap detected, skip this lap and next lap (out lap)
+            if str(row.get("CROSSING_FINISH_LINE_IN_PIT", "")).strip().upper() == "B":
+                if current_stint:
+                    # Check if current stint is longer than max
+                    if len(current_stint) > len(max_stint):
+                        max_stint = current_stint
+                    current_stint = []
+                skip_next = True  # Skip next lap (out lap)
+                continue
+
+            # Add current lap to stint
+            current_stint.append(row)
+
+        # Final check at end of group
+        if len(current_stint) > len(max_stint):
+            max_stint = current_stint
+
+        if not max_stint:
+            continue
+
+        stint_df = pd.DataFrame(max_stint)
+
+        avg_lap_time = stint_df["LAP_TIME_SECONDS"].mean()
+        stint_laps = stint_df["LAP_NUMBER"].tolist()
+        stint_length = len(stint_laps)
+
+        # Get team, manufacturer, class (assume consistent per car)
+        team = stint_df.iloc[0]["TEAM"] if "TEAM" in stint_df.columns else ""
+        manufacturer = stint_df.iloc[0]["MANUFACTURER"] if "MANUFACTURER" in stint_df.columns else ""
+        race_class = stint_df.iloc[0]["CLASS"] if "CLASS" in stint_df.columns else ""
+
+        # Aggregate unique drivers in stint
+        drivers = stint_df["DRIVER_NAME"].dropna().unique()
+        drivers_str = " / ".join(drivers)
+
+        longest_runs.append({
+            "Car": car_number,
+            "Team": team,
+            "Manufacturer": manufacturer,
+            "Class": race_class,
+            "Drivers": drivers_str,
+            "Average_Lap_Time_Seconds": avg_lap_time,
+            "Lap_Numbers": stint_laps,
+            "Stint_Length": stint_length,
+        })
 
     if not longest_runs:
-        st.warning("No longest runs found for selected filters.")
+        st.warning("No valid longest runs found for the selected filters.")
         return
 
-    avg_df = pd.DataFrame(longest_runs).sort_values("AVG_LAP_TIME_SECONDS")
+    long_runs_df = pd.DataFrame(longest_runs)
 
-    # --- Map team colors ---
+    # --- Color mapping ---
     def get_team_color(team):
         for key, color in team_colors.items():
             if key.lower() in team.lower():
                 return color
         return "#888888"
 
-    avg_df["color"] = avg_df["TEAM"].apply(get_team_color)
-    avg_df["Label"] = avg_df["NUMBER"].astype(str) + " — " + avg_df["TEAM"]
+    long_runs_df["color"] = long_runs_df["Team"].apply(get_team_color)
+    long_runs_df["Label"] = long_runs_df["Car"].astype(str) + " — " + long_runs_df["Team"]
 
-    # --- Plotly bar chart ---
+    # --- Plot longest run average pace bar chart ---
     fig = px.bar(
-        avg_df,
+        long_runs_df.sort_values("Average_Lap_Time_Seconds"),
         y="Label",
-        x="AVG_LAP_TIME_SECONDS",
-        color="TEAM",
+        x="Average_Lap_Time_Seconds",
+        color="Team",
         orientation="h",
-        color_discrete_map={team: col for team, col in zip(avg_df["TEAM"], avg_df["color"])},
+        color_discrete_map={team: col for team, col in zip(long_runs_df["Team"], long_runs_df["color"])},
+        title="Longest Run Average Pace by Car",
+        labels={"Average_Lap_Time_Seconds": "Average Lap Time (s)", "Label": "Car — Team"},
     )
 
     fig.update_yaxes(
         type='category',
         categoryorder='array',
-        categoryarray=avg_df["Label"]
+        categoryarray=long_runs_df.sort_values("Average_Lap_Time_Seconds")["Label"]
     )
 
-    x_min = avg_df["AVG_LAP_TIME_SECONDS"].min() - 0.5 if not avg_df.empty else 0
-    x_max = avg_df["AVG_LAP_TIME_SECONDS"].max() + 0.5 if not avg_df.empty else 1
+    x_min = long_runs_df["Average_Lap_Time_Seconds"].min() - 0.5 if not long_runs_df.empty else 0
+    x_max = long_runs_df["Average_Lap_Time_Seconds"].max() + 0.5 if not long_runs_df.empty else 1
     fig.update_xaxes(range=[x_min, x_max])
 
     fig.update_layout(
@@ -156,9 +173,37 @@ def show_practice_long_runs(df, team_colors):
         font=dict(color="white", size=14),
         xaxis_title="Average Lap Time (s)",
         yaxis_title="Car Number — Team",
-        title="Longest Run Average Lap Time by Car",
         title_font=dict(size=22),
         showlegend=True,
     )
 
     st.plotly_chart(fig, use_container_width=True)
+
+    # --- Prepare and show detailed tables per class ---
+    def format_lap_time(seconds):
+        mins = int(seconds // 60)
+        secs = seconds % 60
+        return f"{mins}:{secs:06.3f}"
+
+    long_runs_df = long_runs_df.sort_values("Average_Lap_Time_Seconds").reset_index(drop=True)
+    long_runs_df["Position"] = long_runs_df.index + 1
+    long_runs_df["Average Long Run Lap Time"] = long_runs_df["Average_Lap_Time_Seconds"].apply(format_lap_time)
+    long_runs_df["Lap Numbers"] = long_runs_df["Lap_Numbers"].apply(lambda laps: ", ".join(map(str, laps)))
+
+    display_cols = [
+        "Position",
+        "Car",
+        "Team",
+        "Manufacturer",
+        "Drivers",
+        "Average Long Run Lap Time",
+        "Lap Numbers",
+        "Stint_Length"
+    ]
+
+    for cls in long_runs_df["Class"].unique():
+        st.markdown(f"### Class: {cls}")
+        class_df = long_runs_df[long_runs_df["Class"] == cls][display_cols].rename(
+            columns={"Stint_Length": "Stint Length (laps)"}
+        )
+        st.dataframe(class_df, use_container_width=True)

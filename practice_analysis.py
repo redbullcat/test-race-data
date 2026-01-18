@@ -80,7 +80,6 @@ def show_practice_analysis(
             session_files[session_number] = os.path.join(base_path, filename)
             continue
 
-    # Use practice files if found, else session files
     if practice_files:
         available_sessions = sorted(practice_files.keys())
         files_to_load = practice_files
@@ -113,15 +112,11 @@ def show_practice_analysis(
         if df_tmp.empty:
             continue
 
-        # Session start = first car to cross the line
         start_hour = df_tmp["HOUR_SECONDS"].min()
         end_hour = df_tmp["HOUR_SECONDS"].max()
         duration_hour_sec = end_hour - start_hour
-
-        # Cross-check with ELAPSED
         duration_elapsed_sec = df_tmp["ELAPSED_SECONDS"].max()
 
-        # Prefer ELAPSED if within 2 minutes, else fall back to HOUR
         if abs(duration_hour_sec - duration_elapsed_sec) <= 120:
             session_minutes = duration_elapsed_sec / 60
         else:
@@ -157,21 +152,14 @@ def show_practice_analysis(
     session_dfs = []
 
     for session in selected_sessions:
-        try:
-            df_session = pd.read_csv(files_to_load[session], delimiter=";")
-        except Exception as e:
-            st.error(f"Failed to load Session {session}: {e}")
-            return
-
+        df_session = pd.read_csv(files_to_load[session], delimiter=";")
         df_session.columns = df_session.columns.str.strip()
         df_session["PRACTICE_SESSION"] = f"Session {session}"
-
         session_dfs.append(df_session)
 
     df = pd.concat(session_dfs, ignore_index=True)
     df.columns = df.columns.str.strip()
 
-    # --- Validation ---
     required_columns = {
         "LAP_TIME",
         "NUMBER",
@@ -188,30 +176,36 @@ def show_practice_analysis(
         )
         return
 
-    # --- Keep LAP_TIME as string and strip whitespace ---
     df["LAP_TIME"] = df["LAP_TIME"].astype(str).str.strip()
 
-    # --- High-level metrics ---
+    # --- Session Overview (always visible) ---
     st.markdown("### Session Overview")
 
     col1, col2, col3, col4 = st.columns(4)
 
     with col1:
         st.metric("Sessions", len(selected_sessions))
-
     with col2:
         st.metric("Total laps", len(df))
-
     with col3:
         st.metric("Cars", df["NUMBER"].nunique())
-
     with col4:
         st.metric("Drivers", df["DRIVER_NAME"].nunique())
 
     st.markdown("---")
 
-    show_practice_fastest_laps(df)
-    show_practice_pace_chart(df, team_colors)
-    show_practice_long_runs(df, team_colors)
-    show_practice_fastest_runs(df, team_colors)
-    show_practice_team_run_analysis(df, team_colors)
+    # --- Collapsible chart sections ---
+    with st.expander("Fastest Laps", expanded=True):
+        show_practice_fastest_laps(df)
+
+    with st.expander("Pace Chart", expanded=True):
+        show_practice_pace_chart(df, team_colors)
+
+    with st.expander("Long Runs", expanded=True):
+        show_practice_long_runs(df, team_colors)
+
+    with st.expander("Fastest Runs", expanded=True):
+        show_practice_fastest_runs(df, team_colors)
+
+    with st.expander("Team Run Analysis", expanded=True):
+        show_practice_team_run_analysis(df, team_colors)

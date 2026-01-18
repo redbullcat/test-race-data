@@ -27,48 +27,36 @@ def show_practice_team_run_analysis(df, team_colors):
 
     team_df = class_df[class_df["TEAM"] == selected_team]
 
-    # --- Add car filter ---
-    cars = sorted(team_df["NUMBER"].dropna().unique().tolist())
-    selected_car = st.selectbox(
-        "Select Car:",
-        options=cars,
-        key="team_run_car_filter"
-    )
-
-    team_car_df = team_df[team_df["NUMBER"] == selected_car]
-
-    if team_car_df.empty:
-        st.warning("No data available for the selected car.")
+    if team_df.empty:
+        st.warning("No data available for the selected team.")
         return
 
     # ----------------------------
-    # ELAPSED → minutes conversion
+    # ELAPSED → seconds conversion
     # ----------------------------
-    def elapsed_to_minutes(x):
+    def elapsed_to_seconds(x):
         try:
             parts = str(x).split(":")
             if len(parts) == 2:
                 mins, secs = parts
-                total_seconds = int(mins) * 60 + float(secs)
-                return total_seconds / 60
+                return int(mins) * 60 + float(secs)
             elif len(parts) == 3:
                 hrs, mins, secs = parts
-                total_seconds = int(hrs) * 3600 + int(mins) * 60 + float(secs)
-                return total_seconds / 60
+                return int(hrs) * 3600 + int(mins) * 60 + float(secs)
         except Exception:
             return None
 
-    team_car_df["ELAPSED_MINUTES"] = team_car_df["ELAPSED"].apply(elapsed_to_minutes)
-    team_car_df = team_car_df.dropna(subset=["ELAPSED_MINUTES"])
+    team_df["ELAPSED_SECONDS"] = team_df["ELAPSED"].apply(elapsed_to_seconds)
+    team_df = team_df.dropna(subset=["ELAPSED_SECONDS"])
 
     # ----------------------------
     # Per-session charts
     # ----------------------------
-    for session_name, session_df in team_car_df.groupby("PRACTICE_SESSION"):
+    for session_name, session_df in team_df.groupby("PRACTICE_SESSION"):
         st.markdown(f"### {session_name}")
 
-        # True session duration (on-track) in minutes
-        session_duration = session_df["ELAPSED_MINUTES"].max()
+        # True session duration (on-track)
+        session_duration = session_df["ELAPSED_SECONDS"].max()
 
         runs = []
 
@@ -104,8 +92,8 @@ def show_practice_team_run_analysis(df, team_colors):
         for run in runs:
             run_df = pd.DataFrame(run)
 
-            start_time = run_df["ELAPSED_MINUTES"].min()
-            end_time = run_df["ELAPSED_MINUTES"].max()
+            start_time = run_df["ELAPSED_SECONDS"].min()
+            end_time = run_df["ELAPSED_SECONDS"].max()
             duration = end_time - start_time
             lap_count = len(run_df)
 
@@ -122,6 +110,14 @@ def show_practice_team_run_analysis(df, team_colors):
             st.info("No plottable runs in this session.")
             continue
 
+        # --- Scale bar widths to run durations ---
+        max_pixel_width = 300
+        max_duration = runs_df["Run Duration"].max()
+        scale_factor = max_pixel_width / max_duration if max_duration > 0 else 1
+        scaled_widths = runs_df["Run Duration"] * scale_factor
+        min_pixel_width = 10
+        scaled_widths = scaled_widths.clip(lower=min_pixel_width)
+
         # ----------------------------
         # Plot
         # ----------------------------
@@ -129,24 +125,23 @@ def show_practice_team_run_analysis(df, team_colors):
             runs_df,
             x="Run Start",
             y="Laps",
-            width=duration if duration > 0 else None,
             color="Car",
-            title=f"{selected_team} – Runs in {session_name} (Car {selected_car})",
+            title=f"{selected_team} – Runs in {session_name}",
         )
 
         fig.update_traces(
-            width=runs_df["Run Duration"],
+            width=scaled_widths,
             hovertemplate=(
                 "Car: %{customdata[0]}<br>"
                 "Laps: %{y}<br>"
-                "Start: %{x:.2f} min<br>"
-                "Duration: %{customdata[1]:.2f} min"
+                "Start: %{x:.1f}s<br>"
+                "Duration: %{customdata[1]:.1f}s"
             ),
             customdata=runs_df[["Car", "Run Duration"]].values,
         )
 
         fig.update_xaxes(
-            title="Session Time (minutes)",
+            title="Session Time (seconds)",
             range=[0, session_duration]
         )
 

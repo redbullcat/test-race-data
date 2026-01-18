@@ -66,18 +66,17 @@ def show_practice_fastest_runs(df, team_colors):
 
     filtered_df = filter_top_percent_laps(filtered_df, top_percent)
 
-    # --- Find fastest no-pit stint per car ---
-    # Pits indicated by 'B' in CROSSING_FINISH_LINE_IN_PIT
+    # --- Find fastest no-pit stint per car (minimum 7 laps) ---
     fastest_runs = []
 
     for car_number, group in filtered_df.groupby("NUMBER"):
-        group = group.sort_values(["PRACTICE_SESSION", "LAP_NUMBER"]).reset_index(drop=True)
+        group = group.sort_values("LAP_NUMBER").reset_index(drop=True)
+
+        max_avg_lap_time = None
+        fastest_stint = None
 
         current_stint = []
-        skip_next = False  # Skip the lap after pit (out lap)
-
-        best_stint = None
-        best_avg_lap_time = float('inf')
+        skip_next = False
 
         for idx, row in group.iterrows():
             if skip_next:
@@ -85,56 +84,57 @@ def show_practice_fastest_runs(df, team_colors):
                 continue
 
             if str(row.get("CROSSING_FINISH_LINE_IN_PIT", "")).strip().upper() == "B":
-                # Evaluate current stint if any
                 if current_stint:
                     stint_df = pd.DataFrame(current_stint)
                     avg_lap_time = stint_df["LAP_TIME_SECONDS"].mean()
 
-                    if avg_lap_time < best_avg_lap_time:
-                        best_avg_lap_time = avg_lap_time
-                        best_stint = stint_df
+                    if (max_avg_lap_time is None) or (avg_lap_time < max_avg_lap_time):
+                        max_avg_lap_time = avg_lap_time
+                        fastest_stint = current_stint
 
-                current_stint = []
+                    current_stint = []
                 skip_next = True
                 continue
 
             current_stint.append(row)
 
-        # Check last stint at end
+        # Final check at end of group
         if current_stint:
             stint_df = pd.DataFrame(current_stint)
             avg_lap_time = stint_df["LAP_TIME_SECONDS"].mean()
 
-            if avg_lap_time < best_avg_lap_time:
-                best_avg_lap_time = avg_lap_time
-                best_stint = stint_df
+            if (max_avg_lap_time is None) or (avg_lap_time < max_avg_lap_time):
+                max_avg_lap_time = avg_lap_time
+                fastest_stint = current_stint
 
-        if best_stint is None or best_stint.empty:
-            continue
+        if fastest_stint:
+            stint_df = pd.DataFrame(fastest_stint)
+            stint_length = len(stint_df)
 
-        # Aggregate details
-        team = best_stint.iloc[0]["TEAM"] if "TEAM" in best_stint.columns else ""
-        manufacturer = best_stint.iloc[0]["MANUFACTURER"] if "MANUFACTURER" in best_stint.columns else ""
-        race_class = best_stint.iloc[0]["CLASS"] if "CLASS" in best_stint.columns else ""
-        session = best_stint.iloc[0]["PRACTICE_SESSION"] if "PRACTICE_SESSION" in best_stint.columns else ""
+            # Only keep if stint length >= 7 laps
+            if stint_length >= 7:
+                avg_lap_time = stint_df["LAP_TIME_SECONDS"].mean()
+                stint_laps = stint_df["LAP_NUMBER"].tolist()
+                team = stint_df.iloc[0]["TEAM"] if "TEAM" in stint_df.columns else ""
+                manufacturer = stint_df.iloc[0]["MANUFACTURER"] if "MANUFACTURER" in stint_df.columns else ""
+                race_class = stint_df.iloc[0]["CLASS"] if "CLASS" in stint_df.columns else ""
 
-        drivers = best_stint["DRIVER_NAME"].dropna().unique()
-        drivers_str = " / ".join(drivers)
+                drivers = stint_df["DRIVER_NAME"].dropna().unique()
+                drivers_str = " / ".join(drivers)
 
-        fastest_runs.append({
-            "Car": car_number,
-            "Team": team,
-            "Manufacturer": manufacturer,
-            "Class": race_class,
-            "Drivers": drivers_str,
-            "Average_Lap_Time_Seconds": best_avg_lap_time,
-            "Lap_Numbers": best_stint["LAP_NUMBER"].tolist(),
-            "Stint_Length": len(best_stint),
-            "Session": session,
-        })
+                fastest_runs.append({
+                    "Car": car_number,
+                    "Team": team,
+                    "Manufacturer": manufacturer,
+                    "Class": race_class,
+                    "Drivers": drivers_str,
+                    "Average_Lap_Time_Seconds": avg_lap_time,
+                    "Lap_Numbers": stint_laps,
+                    "Stint_Length": stint_length,
+                })
 
     if not fastest_runs:
-        st.warning("No valid fastest runs found for the selected filters.")
+        st.warning("No valid fastest runs of at least 7 laps found for the selected filters.")
         return
 
     fastest_runs_df = pd.DataFrame(fastest_runs)
@@ -157,7 +157,7 @@ def show_practice_fastest_runs(df, team_colors):
         color="Team",
         orientation="h",
         color_discrete_map={team: col for team, col in zip(fastest_runs_df["Team"], fastest_runs_df["color"])},
-        title="Fastest Run Average Pace by Car",
+        title="Fastest Run Average Pace by Car (Min 7 Laps)",
         labels={"Average_Lap_Time_Seconds": "Average Lap Time (s)", "Label": "Car — Team"},
     )
 
@@ -202,8 +202,7 @@ def show_practice_fastest_runs(df, team_colors):
         "Drivers",
         "Average Fastest Run Lap Time",
         "Lap Numbers",
-        "Stint_Length",
-        "Session"
+        "Stint_Length"
     ]
 
     for cls in fastest_runs_df["Class"].unique():

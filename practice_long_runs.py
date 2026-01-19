@@ -96,9 +96,9 @@ def show_practice_long_runs(longest_stints_df, team_colors):
             "Team": row["Team"],
             "Manufacturer": row["Manufacturer"],
             "Class": row["Class"],
-            "Driver": row["Driver"],
+            "Drivers": row["Drivers"],
             "Session": row["Session"],
-            "Stint Length (Laps)": len(row["Lap_Numbers"]),
+            "Stint Length (Laps)": row["Stint_Length"],
             "Lap Numbers": ", ".join(str(ln) for ln in row["Lap_Numbers"]),
             "Lap Times (s)": ", ".join(f"{lt:.3f}" for lt in row["Lap_Times"]),
             "Average 20% Pace (s)": (

@@ -297,5 +297,5 @@ def show_practice_analysis(
     with st.expander("Team Run Analysis", expanded=True):
         show_practice_team_run_analysis(df, team_colors)
 
-with st.expander("Average Long Run Pace", expanded=False):
-    show_practice_average_long_run_pace(df, team_colors)
+    with st.expander("Average Long Run Pace", expanded=False):
+        show_practice_average_long_run_pace(df, team_colors)

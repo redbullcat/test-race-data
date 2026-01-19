@@ -42,20 +42,23 @@ def get_longest_stints(df):
     Calculate the longest no-pit stint per car across all sessions,
     excluding out-laps and in-laps defined by laps crossing finish line in pits ('B').
 
+    Cars are uniquely identified by NUMBER + TEAM to avoid collisions
+    (e.g. 23 vs 023 across different teams).
+
     Returns a DataFrame with columns:
     - Car
     - Team
     - Manufacturer
     - Class
-    - Drivers (string)
-    - Lap_Numbers (list)
-    - Lap_Times (list of seconds)
+    - Drivers
+    - Lap_Numbers
+    - Lap_Times
     - Stint_Length
     - Average_Lap_Time_Seconds
     - Average_20_Percent_Pace
     - Session
     """
-    # Ensure LAP_TIME_SECONDS exists
+
     if "LAP_TIME_SECONDS" not in df.columns:
         def lap_to_seconds(x):
             try:
@@ -63,43 +66,40 @@ def get_longest_stints(df):
                 return int(mins) * 60 + float(secs)
             except Exception:
                 return None
+
         df["LAP_TIME_SECONDS"] = df["LAP_TIME"].apply(lap_to_seconds)
 
     df = df.dropna(subset=["LAP_TIME_SECONDS"])
 
     longest_runs = []
 
-    for car_number, car_group in df.groupby("NUMBER"):
+    # CHANGE: group by NUMBER + TEAM
+    for (car_number, team_name), car_group in df.groupby(["NUMBER", "TEAM"]):
         max_stint = []
         max_stint_session = None
         max_stint_len = 0
 
-        # Group by session within car
         for session_name, session_group in car_group.groupby("PRACTICE_SESSION"):
-            # Sort by LAP_NUMBER for proper sequence
             if "LAP_NUMBER" in session_group.columns:
                 session_group = session_group.sort_values("LAP_NUMBER").reset_index(drop=True)
             else:
                 session_group = session_group.reset_index(drop=True)
 
             current_stint = []
-            current_stint_session = None
-            skip_next = False  # to skip lap after 'B' lap (in-lap)
+            skip_next = False
 
-            for idx, row in session_group.iterrows():
+            for _, row in session_group.iterrows():
                 if skip_next:
-                    # Skip the in-lap right after a 'B' lap
                     skip_next = False
                     continue
 
-                crossing_pit = str(row.get("CROSSING_FINISH_LINE_IN_PIT", "")).strip().upper() == "B"
+                crossing_pit = str(
+                    row.get("CROSSING_FINISH_LINE_IN_PIT", "")
+                ).strip().upper() == "B"
 
                 if crossing_pit:
-                    # End current stint at previous lap (exclude this pit lap and previous lap)
                     if current_stint:
-                        # Remove last lap from current_stint (the out-lap before pit)
-                        if len(current_stint) > 0:
-                            current_stint = current_stint[:-1]
+                        current_stint = current_stint[:-1]
 
                         if len(current_stint) > max_stint_len:
                             max_stint = current_stint
@@ -107,17 +107,11 @@ def get_longest_stints(df):
                             max_stint_len = len(current_stint)
 
                     current_stint = []
-                    current_stint_session = None
-                    skip_next = True  # skip next lap (in-lap)
+                    skip_next = True
                     continue
-
-                # Add laps to current stint only if not out-lap or in-lap
-                if not current_stint:
-                    current_stint_session = session_name
 
                 current_stint.append(row)
 
-            # Final check after loop for this session
             if current_stint and len(current_stint) > max_stint_len:
                 max_stint = current_stint
                 max_stint_session = session_name
@@ -128,17 +122,19 @@ def get_longest_stints(df):
 
         stint_df = pd.DataFrame(max_stint)
 
-        # Prepare data for output
         lap_times = stint_df["LAP_TIME_SECONDS"].tolist()
-        lap_numbers = stint_df["LAP_NUMBER"].tolist() if "LAP_NUMBER" in stint_df.columns else list(range(1, len(lap_times) + 1))
-        avg_lap_time = sum(lap_times) / len(lap_times) if lap_times else None
+        lap_numbers = (
+            stint_df["LAP_NUMBER"].tolist()
+            if "LAP_NUMBER" in stint_df.columns
+            else list(range(1, len(lap_times) + 1))
+        )
 
-        # Calculate average 20% pace (fastest 20% laps average)
+        avg_lap_time = sum(lap_times) / len(lap_times)
+
         lap_times_sorted = sorted(lap_times)
         top_20_count = max(1, int(len(lap_times_sorted) * 0.2))
-        avg_20_pace = sum(lap_times_sorted[:top_20_count]) / top_20_count if lap_times_sorted else None
+        avg_20_pace = sum(lap_times_sorted[:top_20_count]) / top_20_count
 
-        team = stint_df.iloc[0]["TEAM"] if "TEAM" in stint_df.columns else ""
         manufacturer = stint_df.iloc[0]["MANUFACTURER"] if "MANUFACTURER" in stint_df.columns else ""
         race_class = stint_df.iloc[0]["CLASS"] if "CLASS" in stint_df.columns else ""
 
@@ -147,7 +143,7 @@ def get_longest_stints(df):
 
         longest_runs.append({
             "Car": car_number,
-            "Team": team,
+            "Team": team_name,  # CHANGE: use grouped team
             "Manufacturer": manufacturer,
             "Class": race_class,
             "Drivers": drivers_str,
@@ -181,7 +177,6 @@ def show_practice_analysis(
         st.error("Data directory not found.")
         return
 
-    # --- Discover practice and session files ---
     practice_files = {}
     session_files = {}
 
@@ -215,7 +210,6 @@ def show_practice_analysis(
         st.warning("No practice/test session files found for this event.")
         return
 
-    # --- Preload session durations ---
     session_durations = {}
 
     for session in available_sessions:
@@ -249,7 +243,6 @@ def show_practice_analysis(
 
         session_durations[session] = round(session_minutes, 1)
 
-    # --- Session selection UI ---
     st.markdown("### Session Selection")
 
     all_sessions_selected = st.checkbox("All sessions", value=True)
@@ -257,10 +250,7 @@ def show_practice_analysis(
     selected_sessions = []
 
     for session in available_sessions:
-        duration_str = ""
-        if session in session_durations:
-            duration_str = f" ({session_durations[session]} minutes)"
-
+        duration_str = f" ({session_durations[session]} minutes)" if session in session_durations else ""
         checked = st.checkbox(
             f"Session {session}{duration_str}",
             value=all_sessions_selected,
@@ -273,7 +263,6 @@ def show_practice_analysis(
         st.warning("No sessions selected.")
         return
 
-    # --- Load selected sessions ---
     session_dfs = []
 
     for session in selected_sessions:
@@ -285,48 +274,31 @@ def show_practice_analysis(
     df = pd.concat(session_dfs, ignore_index=True)
     df.columns = df.columns.str.strip()
 
-    required_columns = {
-        "LAP_TIME",
-        "NUMBER",
-        "TEAM",
-        "CLASS",
-        "DRIVER_NAME"
-    }
-
+    required_columns = {"LAP_TIME", "NUMBER", "TEAM", "CLASS", "DRIVER_NAME"}
     missing_columns = required_columns - set(df.columns)
+
     if missing_columns:
-        st.error(
-            "Missing required columns for practice analysis: "
-            + ", ".join(sorted(missing_columns))
-        )
+        st.error("Missing required columns: " + ", ".join(sorted(missing_columns)))
         return
 
     df["LAP_TIME"] = df["LAP_TIME"].astype(str).str.strip()
 
-    # --- Session Overview (always visible) ---
     st.markdown("### Session Overview")
 
     col1, col2, col3, col4 = st.columns(4)
-
-    with col1:
-        st.metric("Sessions", len(selected_sessions))
-    with col2:
-        st.metric("Total laps", len(df))
-    with col3:
-        st.metric("Cars", df["NUMBER"].nunique())
-    with col4:
-        st.metric("Drivers", df["DRIVER_NAME"].nunique())
+    col1.metric("Sessions", len(selected_sessions))
+    col2.metric("Total laps", len(df))
+    col3.metric("Cars", df[["NUMBER", "TEAM"]].drop_duplicates().shape[0])
+    col4.metric("Drivers", df["DRIVER_NAME"].nunique())
 
     st.markdown("---")
 
-    # --- Collapsible chart sections ---
     with st.expander("Fastest Laps", expanded=True):
         show_practice_fastest_laps(df)
 
     with st.expander("Pace Chart", expanded=True):
         show_practice_pace_chart(df, team_colors)
 
-    # --- Calculate longest stints once ---
     longest_stints_df = get_longest_stints(df)
 
     with st.expander("Long Runs", expanded=True):

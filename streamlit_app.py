@@ -278,7 +278,11 @@ team_colors = {
     'Heart of Racing': '#242c3f',
     'Racing Spirit of Leman': '#428ca8',
     'Iron Lynx': '#fefe00',
-    'TF Sport': '#eaaa1d'
+    'TF Sport': '#eaaa1d',
+    'Cadillac Wayne Taylor Racing': '#0E3463',
+    'JDC-Miller MotorSports': '#F8D94A',
+    'Acura Meyer Shank Racing w/Curb Agajanian': '#E6662C',
+    'Cadillac Whelen': '#D53C35'
 }
 
 # --- Page Header ---

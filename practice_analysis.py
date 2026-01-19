@@ -41,22 +41,6 @@ def get_longest_stints(df):
     """
     Calculate the longest no-pit stint per car across all sessions,
     excluding out-laps and in-laps defined by laps crossing finish line in pits ('B').
-
-    Cars are uniquely identified by NUMBER + TEAM to avoid collisions
-    (e.g. 23 vs 023 across different teams).
-
-    Returns a DataFrame with columns:
-    - Car
-    - Team
-    - Manufacturer
-    - Class
-    - Drivers
-    - Lap_Numbers
-    - Lap_Times
-    - Stint_Length
-    - Average_Lap_Time_Seconds
-    - Average_20_Percent_Pace
-    - Session
     """
 
     if "LAP_TIME_SECONDS" not in df.columns:
@@ -73,7 +57,6 @@ def get_longest_stints(df):
 
     longest_runs = []
 
-    # CHANGE: group by NUMBER + TEAM
     for (car_number, team_name), car_group in df.groupby(["NUMBER", "TEAM"]):
         max_stint = []
         max_stint_session = None
@@ -143,7 +126,7 @@ def get_longest_stints(df):
 
         longest_runs.append({
             "Car": car_number,
-            "Team": team_name,  # CHANGE: use grouped team
+            "Team": team_name,
             "Manufacturer": manufacturer,
             "Class": race_class,
             "Drivers": drivers_str,
@@ -242,6 +225,9 @@ def show_practice_analysis(
             session_minutes = duration_hour_sec / 60
 
         session_durations[session] = round(session_minutes, 1)
+
+    # ✅ FIX: store session durations once, after loop
+    st.session_state["session_durations"] = session_durations
 
     st.markdown("### Session Selection")
 

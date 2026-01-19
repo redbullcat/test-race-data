@@ -9,6 +9,7 @@ from practice_pace_chart import show_practice_pace_chart
 from practice_long_runs import show_practice_long_runs
 from practice_fastest_runs import show_practice_fastest_runs
 from practice_team_run_analysis import show_practice_team_run_analysis
+from practice_average_long_run_pace import show_practice_average_long_run_pace
 
 PRACTICE_PATTERN = re.compile(r"_practice(\d+)\.csv$", re.IGNORECASE)
 SESSION_PATTERN = re.compile(r"_session(\d+)\.csv$", re.IGNORECASE)
@@ -295,3 +296,6 @@ def show_practice_analysis(
 
     with st.expander("Team Run Analysis", expanded=True):
         show_practice_team_run_analysis(df, team_colors)
+
+with st.expander("Average Long Run Pace", expanded=False):
+    show_practice_average_long_run_pace(df, team_colors)

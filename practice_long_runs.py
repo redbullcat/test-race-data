@@ -74,7 +74,6 @@ def show_practice_long_runs(longest_stints_df, team_colors):
         labels={"Lap": "Lap Number", "Lap Time (s)": "Lap Time (seconds)"}
     )
 
-    # Faster times at bottom: invert y axis
     fig.update_yaxes(autorange="reversed")
 
     fig.update_layout(
@@ -90,7 +89,6 @@ def show_practice_long_runs(longest_stints_df, team_colors):
     # --- Debug: Show raw data table below the chart ---
     st.markdown("#### Raw Data for Longest Stints")
 
-    # Prepare table data with new columns Average_20_Percent_Pace and Session
     table_data = []
     for _, row in filtered_df.iterrows():
         table_data.append({
@@ -98,12 +96,17 @@ def show_practice_long_runs(longest_stints_df, team_colors):
             "Team": row["Team"],
             "Manufacturer": row["Manufacturer"],
             "Class": row["Class"],
+            "Driver": row["Driver"],
+            "Session": row["Session"],
+            "Stint Length (Laps)": len(row["Lap_Numbers"]),
             "Lap Numbers": ", ".join(str(ln) for ln in row["Lap_Numbers"]),
             "Lap Times (s)": ", ".join(f"{lt:.3f}" for lt in row["Lap_Times"]),
-            "Average 20% Pace (s)": f"{row['Average_20_Percent_Pace']:.3f}" if pd.notnull(row['Average_20_Percent_Pace']) else "N/A",
-            "Session": row["Session"]
+            "Average 20% Pace (s)": (
+                f"{row['Average_20_Percent_Pace']:.3f}"
+                if pd.notnull(row["Average_20_Percent_Pace"])
+                else "N/A"
+            )
         })
 
     debug_df = pd.DataFrame(table_data)
-
     st.dataframe(debug_df, use_container_width=True)

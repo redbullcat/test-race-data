@@ -196,3 +196,18 @@ elif page == "Practice / Test analysis":
         race=selected_event_key,
         team_colors=team_colors
     )
+
+# --- Debug: Car ID table ---
+with st.expander("Debug: Car IDs"):
+    debug_df = (
+        df[["CAR_ID", "NUMBER", "TEAM", "CLASS"]]
+        .drop_duplicates()
+        .sort_values(["CLASS", "TEAM", "NUMBER"])
+        .reset_index(drop=True)
+    )
+
+    st.dataframe(
+        debug_df,
+        use_container_width=True,
+        hide_index=True
+    )

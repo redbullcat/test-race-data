@@ -9,12 +9,13 @@ import streamlit as st
 def get_overall_leader_by_lap(df):
     """
     One row per lap: overall race leader.
+    Uses CAR_ID for uniqueness, NUMBER only for display.
     """
     return (
         df.sort_values(["LAP_NUMBER", "ELAPSED"])
           .groupby("LAP_NUMBER", as_index=False)
           .first()
-          [["LAP_NUMBER", "NUMBER", "DRIVER_NAME", "CLASS", "FLAG_AT_FL"]]
+          [["LAP_NUMBER", "CAR_ID", "NUMBER", "DRIVER_NAME", "CLASS", "FLAG_AT_FL"]]
     )
 
 
@@ -26,7 +27,7 @@ def get_class_leader_by_lap(df):
         df.sort_values(["LAP_NUMBER", "CLASS", "ELAPSED"])
           .groupby(["LAP_NUMBER", "CLASS"], as_index=False)
           .first()
-          [["LAP_NUMBER", "CLASS", "NUMBER", "DRIVER_NAME"]]
+          [["LAP_NUMBER", "CLASS", "CAR_ID", "NUMBER", "DRIVER_NAME"]]
     )
 
 
@@ -37,7 +38,7 @@ def get_class_leader_by_lap(df):
 def compute_lead_changes(overall_leader_df):
     overall_leader_df = overall_leader_df.sort_values("LAP_NUMBER")
     return max(
-        (overall_leader_df["NUMBER"] != overall_leader_df["NUMBER"].shift()).sum() - 1,
+        (overall_leader_df["CAR_ID"] != overall_leader_df["CAR_ID"].shift()).sum() - 1,
         0
     )
 
@@ -48,11 +49,11 @@ def compute_flag_lap_counts(overall_leader_df):
 
 def compute_longest_lead_stint(overall_leader_df):
     df = overall_leader_df.copy()
-    df["change"] = df["NUMBER"] != df["NUMBER"].shift()
+    df["change"] = df["CAR_ID"] != df["CAR_ID"].shift()
     df["stint_id"] = df["change"].cumsum()
 
     stints = (
-        df.groupby(["stint_id", "NUMBER"])
+        df.groupby(["stint_id", "CAR_ID", "NUMBER"])
         .size()
         .reset_index(name="laps_led")
         .sort_values("laps_led", ascending=False)
@@ -75,7 +76,7 @@ def compute_car_lead_stats_by_class(class_leader_df):
 
     car_stats = (
         class_leader_df
-        .groupby(["CLASS", "NUMBER"])
+        .groupby(["CLASS", "CAR_ID", "NUMBER"])
         .size()
         .reset_index(name="laps_led")
     )
@@ -97,7 +98,7 @@ def compute_driver_lead_stats_by_class(class_leader_df):
 
     driver_stats = (
         class_leader_df
-        .groupby(["CLASS", "NUMBER", "DRIVER_NAME"])
+        .groupby(["CLASS", "CAR_ID", "NUMBER", "DRIVER_NAME"])
         .size()
         .reset_index(name="laps_led")
     )
@@ -130,7 +131,7 @@ def show_race_stats(df):
         st.metric("Overall lead changes", compute_lead_changes(overall_leader_df))
 
     with col2:
-        st.metric("Cars that led overall", overall_leader_df["NUMBER"].nunique())
+        st.metric("Cars that led overall", overall_leader_df["CAR_ID"].nunique())
 
     with col3:
         st.metric("Total race laps", overall_leader_df["LAP_NUMBER"].nunique())

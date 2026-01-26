@@ -3,14 +3,38 @@ import streamlit as st
 
 
 # =========================
+# Helper: lap ranges
+# =========================
+
+def laps_to_ranges(laps):
+    """
+    Convert a sorted iterable of lap numbers into compact ranges.
+    Example: [1,2,3,5,6,10] -> "1–3, 5–6, 10"
+    """
+    if not laps:
+        return ""
+
+    laps = sorted(laps)
+    ranges = []
+
+    start = prev = laps[0]
+
+    for lap in laps[1:]:
+        if lap == prev + 1:
+            prev = lap
+        else:
+            ranges.append(f"{start}" if start == prev else f"{start}–{prev}")
+            start = prev = lap
+
+    ranges.append(f"{start}" if start == prev else f"{start}–{prev}")
+    return ", ".join(ranges)
+
+
+# =========================
 # Leader extraction
 # =========================
 
 def get_overall_leader_by_lap(df):
-    """
-    One row per lap: overall race leader.
-    Uses CAR_ID for uniqueness, NUMBER only for display.
-    """
     return (
         df.sort_values(["LAP_NUMBER", "ELAPSED"])
           .groupby("LAP_NUMBER", as_index=False)
@@ -20,9 +44,6 @@ def get_overall_leader_by_lap(df):
 
 
 def get_class_leader_by_lap(df):
-    """
-    One row per lap PER CLASS: class leader.
-    """
     return (
         df.sort_values(["LAP_NUMBER", "CLASS", "ELAPSED"])
           .groupby(["LAP_NUMBER", "CLASS"], as_index=False)
@@ -74,12 +95,19 @@ def compute_car_lead_stats_by_class(class_leader_df):
         .to_dict()
     )
 
-    car_stats = (
+    grouped = (
         class_leader_df
         .groupby(["CLASS", "CAR_ID", "NUMBER"])
-        .size()
+    )
+
+    car_stats = (
+        grouped.size()
         .reset_index(name="laps_led")
     )
+
+    car_stats["laps_range"] = grouped["LAP_NUMBER"].apply(
+        lambda x: laps_to_ranges(x.tolist())
+    ).values
 
     car_stats["pct_led"] = car_stats.apply(
         lambda r: round(r["laps_led"] / total_laps.get(r["CLASS"], 1) * 100, 1),
@@ -96,12 +124,19 @@ def compute_driver_lead_stats_by_class(class_leader_df):
         .to_dict()
     )
 
-    driver_stats = (
+    grouped = (
         class_leader_df
         .groupby(["CLASS", "CAR_ID", "NUMBER", "DRIVER_NAME"])
-        .size()
+    )
+
+    driver_stats = (
+        grouped.size()
         .reset_index(name="laps_led")
     )
+
+    driver_stats["laps_range"] = grouped["LAP_NUMBER"].apply(
+        lambda x: laps_to_ranges(x.tolist())
+    ).values
 
     driver_stats["pct_led"] = driver_stats.apply(
         lambda r: round(r["laps_led"] / total_laps.get(r["CLASS"], 1) * 100, 1),
@@ -166,8 +201,11 @@ def show_race_stats(df):
                     "NUMBER": "Car",
                     "CAR_ID": "Car ID",
                     "laps_led": "Laps led",
+                    "laps_range": "Laps led (ranges)",
                     "pct_led": "% of class race led"
-                })[["Car", "Car ID", "Laps led", "% of class race led"]],
+                })[
+                    ["Car", "Car ID", "Laps led", "Laps led (ranges)", "% of class race led"]
+                ],
                 use_container_width=True,
                 hide_index=True
             )
@@ -181,8 +219,11 @@ def show_race_stats(df):
                     "CAR_ID": "Car ID",
                     "DRIVER_NAME": "Driver",
                     "laps_led": "Laps led",
+                    "laps_range": "Laps led (ranges)",
                     "pct_led": "% of class race led"
-                })[["Car", "Car ID", "Driver", "Laps led", "% of class race led"]],
+                })[
+                    ["Car", "Car ID", "Driver", "Laps led", "Laps led (ranges)", "% of class race led"]
+                ],
                 use_container_width=True,
                 hide_index=True
             )

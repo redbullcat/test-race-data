@@ -3,6 +3,25 @@ import streamlit as st
 
 
 # =========================
+# Helper: ELAPSED parsing
+# =========================
+
+def parse_elapsed_to_timedelta(series: pd.Series) -> pd.Series:
+    """
+    Parse ELAPSED values into pandas Timedelta.
+
+    Handles formats like:
+    - hh:mm:ss
+    - hh:mm:ss.sss
+    - mm:ss.s
+
+    Treated as race duration (not wall clock),
+    so no 24h rollover.
+    """
+    return pd.to_timedelta(series, errors="coerce")
+
+
+# =========================
 # Helper: lap ranges
 # =========================
 
@@ -95,15 +114,9 @@ def compute_car_lead_stats_by_class(class_leader_df):
         .to_dict()
     )
 
-    grouped = (
-        class_leader_df
-        .groupby(["CLASS", "CAR_ID", "NUMBER"])
-    )
+    grouped = class_leader_df.groupby(["CLASS", "CAR_ID", "NUMBER"])
 
-    car_stats = (
-        grouped.size()
-        .reset_index(name="laps_led")
-    )
+    car_stats = grouped.size().reset_index(name="laps_led")
 
     car_stats["laps_range"] = grouped["LAP_NUMBER"].apply(
         lambda x: laps_to_ranges(x.tolist())
@@ -124,15 +137,11 @@ def compute_driver_lead_stats_by_class(class_leader_df):
         .to_dict()
     )
 
-    grouped = (
-        class_leader_df
-        .groupby(["CLASS", "CAR_ID", "NUMBER", "DRIVER_NAME"])
+    grouped = class_leader_df.groupby(
+        ["CLASS", "CAR_ID", "NUMBER", "DRIVER_NAME"]
     )
 
-    driver_stats = (
-        grouped.size()
-        .reset_index(name="laps_led")
-    )
+    driver_stats = grouped.size().reset_index(name="laps_led")
 
     driver_stats["laps_range"] = grouped["LAP_NUMBER"].apply(
         lambda x: laps_to_ranges(x.tolist())
@@ -155,6 +164,10 @@ def compute_driver_lead_stats_by_class(class_leader_df):
 
 def show_race_stats(df):
     st.subheader("Race statistics")
+
+    # --- Critical fix: normalize ELAPSED ---
+    df = df.copy()
+    df["ELAPSED"] = parse_elapsed_to_timedelta(df["ELAPSED"])
 
     overall_leader_df = get_overall_leader_by_lap(df)
     class_leader_df = get_class_leader_by_lap(df)

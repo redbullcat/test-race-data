@@ -54,9 +54,9 @@ def compute_longest_lead_stint(overall_leader_df):
 
     stints = (
         df.groupby(["stint_id", "CAR_ID", "NUMBER"])
-        .size()
-        .reset_index(name="laps_led")
-        .sort_values("laps_led", ascending=False)
+          .size()
+          .reset_index(name="laps_led")
+          .sort_values("laps_led", ascending=False)
     )
 
     top = stints.iloc[0]
@@ -162,9 +162,10 @@ def show_race_stats(df):
             st.dataframe(
                 cs.rename(columns={
                     "NUMBER": "Car",
+                    "CAR_ID": "Car ID",
                     "laps_led": "Laps led",
                     "pct_led": "% of class race led"
-                })[["Car", "Laps led", "% of class race led"]],
+                })[["Car", "Car ID", "Laps led", "% of class race led"]],
                 use_container_width=True,
                 hide_index=True
             )
@@ -175,10 +176,11 @@ def show_race_stats(df):
             st.dataframe(
                 ds.rename(columns={
                     "NUMBER": "Car",
+                    "CAR_ID": "Car ID",
                     "DRIVER_NAME": "Driver",
                     "laps_led": "Laps led",
                     "pct_led": "% of class race led"
-                })[["Car", "Driver", "Laps led", "% of class race led"]],
+                })[["Car", "Car ID", "Driver", "Laps led", "% of class race led"]],
                 use_container_width=True,
                 hide_index=True
             )

@@ -143,7 +143,9 @@ def show_race_stats(df):
 
     # --- Longest stint ---
     car, laps = compute_longest_lead_stint(overall_leader_df)
-    st.markdown(f"**Longest uninterrupted overall lead:** Car **{car}** – **{laps} laps**")
+    st.markdown(
+        f"**Longest uninterrupted overall lead:** Car **{car}** – **{laps} laps**"
+    )
 
     # --- Class leaders ---
     st.markdown("## Laps led by class")

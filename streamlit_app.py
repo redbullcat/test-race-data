@@ -116,17 +116,21 @@ if page in ["Overview", "Team by team", "Team season comparison", "Track analysi
     if "\ufeffNUMBER" in df.columns:
         df.rename(columns={"\ufeffNUMBER": "NUMBER"}, inplace=True)
 
-    if {"TEAM", "NUMBER"}.issubset(df.columns):
-        df["NUMBER"] = df.apply(
-            lambda row: (
-                "007" if row["TEAM"] == "Aston Martin Thor Team" and str(row["NUMBER"]) == "7"
-                else "009" if row["TEAM"] == "Aston Martin Thor Team" and str(row["NUMBER"]) == "9"
-                else str(row["NUMBER"]).lstrip("0")
-            ),
-            axis=1
-        )
+    # Add YEAR and SERIES columns for CAR_ID construction
+    df["YEAR"] = selected_year
+    df["SERIES"] = selected_series
 
-    df["NUMBER"] = df["NUMBER"].astype(str)
+    # Ensure TEAM and NUMBER are strings with no leading zero stripping
+    df["NUMBER"] = df["NUMBER"].astype(str).str.strip()
+    df["TEAM"] = df["TEAM"].astype(str).str.strip()
+
+    # Create unique CAR_ID by combining YEAR_SERIES_TEAM_NUMBER
+    df["CAR_ID"] = (
+        df["YEAR"].astype(str) + "_" +
+        df["SERIES"].astype(str) + "_" +
+        df["TEAM"] + "_" +
+        df["NUMBER"]
+    )
 
 # --- Page Header ---
 st.header(f"{selected_year} {selected_series} – {selected_event_key.capitalize()} Analysis")
@@ -152,9 +156,8 @@ team_colors = {
     'Racing Spirit of Leman': '#428ca8', 
     'Iron Lynx': '#fefe00', 
     'TF Sport': '#eaaa1d', 
-    'Cadillac Wayne Taylor Racing': 
-    '#0E3463', 'JDC-Miller MotorSports': 
-    '#F8D94A', 
+    'Cadillac Wayne Taylor Racing': '#0E3463', 
+    'JDC-Miller MotorSports': '#F8D94A', 
     'Acura Meyer Shank Racing w/Curb Agajanian': '#E6662C', 
     'Cadillac Whelen': '#D53C35' }
 

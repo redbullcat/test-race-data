@@ -2,69 +2,110 @@ import pandas as pd
 import streamlit as st
 
 
-def get_leader_by_lap(df):
+# =========================
+# Leader extraction
+# =========================
+
+def get_overall_leader_by_lap(df):
     """
-    One row per lap, leader defined as first car to complete the lap.
-    CLASS is inherited from the leading car on that lap.
+    One row per lap: overall race leader.
     """
-    leader_df = (
+    return (
         df.sort_values(["LAP_NUMBER", "ELAPSED"])
           .groupby("LAP_NUMBER", as_index=False)
           .first()
           [["LAP_NUMBER", "NUMBER", "DRIVER_NAME", "CLASS", "FLAG_AT_FL"]]
     )
-    return leader_df
 
 
-def compute_lead_changes(leader_df):
-    leader_df = leader_df.sort_values("LAP_NUMBER")
-    changes = (leader_df["NUMBER"] != leader_df["NUMBER"].shift()).sum() - 1
-    return max(changes, 0)
-
-
-def compute_flag_lap_counts(leader_df):
-    return leader_df["FLAG_AT_FL"].fillna("GREEN").value_counts().to_dict()
-
-
-def compute_longest_lead_stint(leader_df):
-    leader_df = leader_df.copy()
-    leader_df["lead_change"] = leader_df["NUMBER"] != leader_df["NUMBER"].shift()
-    leader_df["stint_id"] = leader_df["lead_change"].cumsum()
-
-    stint_lengths = (
-        leader_df.groupby(["stint_id", "NUMBER"])
-        .size()
-        .reset_index(name="laps_led")
+def get_class_leader_by_lap(df):
+    """
+    One row per lap PER CLASS: class leader.
+    """
+    return (
+        df.sort_values(["LAP_NUMBER", "CLASS", "ELAPSED"])
+          .groupby(["LAP_NUMBER", "CLASS"], as_index=False)
+          .first()
+          [["LAP_NUMBER", "CLASS", "NUMBER", "DRIVER_NAME"]]
     )
 
-    longest = stint_lengths.sort_values("laps_led", ascending=False).iloc[0]
-    return longest["NUMBER"], int(longest["laps_led"])
+
+# =========================
+# Core metrics
+# =========================
+
+def compute_lead_changes(overall_leader_df):
+    overall_leader_df = overall_leader_df.sort_values("LAP_NUMBER")
+    return max(
+        (overall_leader_df["NUMBER"] != overall_leader_df["NUMBER"].shift()).sum() - 1,
+        0
+    )
 
 
-def compute_car_lead_stats(leader_df):
-    total_laps = leader_df["LAP_NUMBER"].nunique()
+def compute_flag_lap_counts(overall_leader_df):
+    return overall_leader_df["FLAG_AT_FL"].fillna("GREEN").value_counts().to_dict()
+
+
+def compute_longest_lead_stint(overall_leader_df):
+    df = overall_leader_df.copy()
+    df["change"] = df["NUMBER"] != df["NUMBER"].shift()
+    df["stint_id"] = df["change"].cumsum()
+
+    stints = (
+        df.groupby(["stint_id", "NUMBER"])
+        .size()
+        .reset_index(name="laps_led")
+        .sort_values("laps_led", ascending=False)
+    )
+
+    top = stints.iloc[0]
+    return top["NUMBER"], int(top["laps_led"])
+
+
+# =========================
+# Class-based stats
+# =========================
+
+def compute_car_lead_stats_by_class(class_leader_df):
+    total_laps = (
+        class_leader_df.groupby("CLASS")["LAP_NUMBER"]
+        .nunique()
+        .to_dict()
+    )
 
     car_stats = (
-        leader_df.groupby(["CLASS", "NUMBER"])
+        class_leader_df
+        .groupby(["CLASS", "NUMBER"])
         .size()
         .reset_index(name="laps_led")
     )
 
-    car_stats["pct_led"] = (car_stats["laps_led"] / total_laps * 100).round(1)
+    car_stats["pct_led"] = car_stats.apply(
+        lambda r: round(r["laps_led"] / total_laps.get(r["CLASS"], 1) * 100, 1),
+        axis=1
+    )
 
     return car_stats.sort_values(["CLASS", "laps_led"], ascending=[True, False])
 
 
-def compute_driver_lead_stats(leader_df):
-    total_laps = leader_df["LAP_NUMBER"].nunique()
+def compute_driver_lead_stats_by_class(class_leader_df):
+    total_laps = (
+        class_leader_df.groupby("CLASS")["LAP_NUMBER"]
+        .nunique()
+        .to_dict()
+    )
 
     driver_stats = (
-        leader_df.groupby(["CLASS", "NUMBER", "DRIVER_NAME"])
+        class_leader_df
+        .groupby(["CLASS", "NUMBER", "DRIVER_NAME"])
         .size()
         .reset_index(name="laps_led")
     )
 
-    driver_stats["pct_led"] = (driver_stats["laps_led"] / total_laps * 100).round(1)
+    driver_stats["pct_led"] = driver_stats.apply(
+        lambda r: round(r["laps_led"] / total_laps.get(r["CLASS"], 1) * 100, 1),
+        axis=1
+    )
 
     return driver_stats.sort_values(
         ["CLASS", "laps_led", "NUMBER"],
@@ -72,90 +113,71 @@ def compute_driver_lead_stats(leader_df):
     )
 
 
+# =========================
+# Streamlit renderer
+# =========================
+
 def show_race_stats(df):
     st.subheader("Race statistics")
 
-    leader_df = get_leader_by_lap(df)
+    overall_leader_df = get_overall_leader_by_lap(df)
+    class_leader_df = get_class_leader_by_lap(df)
 
-    # --- Headline stats (overall race) ---
-    lead_changes = compute_lead_changes(leader_df)
-    cars_that_led = leader_df["NUMBER"].nunique()
-    flag_counts = compute_flag_lap_counts(leader_df)
-    total_laps = leader_df["LAP_NUMBER"].nunique()
-
+    # --- Headline metrics ---
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        st.metric("Overall lead changes", lead_changes)
+        st.metric("Overall lead changes", compute_lead_changes(overall_leader_df))
 
     with col2:
-        st.metric("Cars that led the race", cars_that_led)
+        st.metric("Cars that led overall", overall_leader_df["NUMBER"].nunique())
 
     with col3:
-        st.metric("Total race laps", total_laps)
+        st.metric("Total race laps", overall_leader_df["LAP_NUMBER"].nunique())
 
-    # --- Flag breakdown ---
+    # --- Flags ---
     st.markdown("**Laps by flag condition**")
-    for flag, count in sorted(flag_counts.items()):
+    for flag, count in compute_flag_lap_counts(overall_leader_df).items():
         st.write(f"- **{flag}**: {count} laps")
 
-    # --- Longest lead stint ---
-    car, laps = compute_longest_lead_stint(leader_df)
-    st.markdown(f"**Longest uninterrupted lead:** Car **{car}** – **{laps} laps**")
+    # --- Longest stint ---
+    car, laps = compute_longest_lead_stint(overall_leader_df)
+    st.markdown(f"**Longest uninterrupted overall lead:** Car **{car}** – **{laps} laps**")
 
-    # --- Per-class lead stats ---
+    # --- Class leaders ---
     st.markdown("## Laps led by class")
 
-    classes = sorted(leader_df["CLASS"].dropna().unique())
+    classes = sorted(class_leader_df["CLASS"].dropna().unique())
+    tabs = st.tabs(classes)
 
-    if not classes:
-        st.info("No class information available for this race.")
-        return
+    car_stats = compute_car_lead_stats_by_class(class_leader_df)
+    driver_stats = compute_driver_lead_stats_by_class(class_leader_df)
 
-    class_tabs = st.tabs(classes)
-
-    car_stats = compute_car_lead_stats(leader_df)
-    driver_stats = compute_driver_lead_stats(leader_df)
-
-    for tab, race_class in zip(class_tabs, classes):
+    for tab, cls in zip(tabs, classes):
         with tab:
-            st.markdown(f"### {race_class}")
+            st.markdown("### Cars")
+            cs = car_stats[car_stats["CLASS"] == cls]
 
-            # --- Cars ---
-            st.markdown("**Cars**")
-            class_car_stats = car_stats[car_stats["CLASS"] == race_class]
+            st.dataframe(
+                cs.rename(columns={
+                    "NUMBER": "Car",
+                    "laps_led": "Laps led",
+                    "pct_led": "% of class race led"
+                })[["Car", "Laps led", "% of class race led"]],
+                use_container_width=True,
+                hide_index=True
+            )
 
-            if class_car_stats.empty:
-                st.info("No lead data for this class.")
-            else:
-                st.dataframe(
-                    class_car_stats.rename(
-                        columns={
-                            "NUMBER": "Car",
-                            "laps_led": "Laps led",
-                            "pct_led": "% of race led"
-                        }
-                    )[["Car", "Laps led", "% of race led"]],
-                    use_container_width=True,
-                    hide_index=True
-                )
+            st.markdown("### Drivers")
+            ds = driver_stats[driver_stats["CLASS"] == cls]
 
-            # --- Drivers ---
-            st.markdown("**Drivers**")
-            class_driver_stats = driver_stats[driver_stats["CLASS"] == race_class]
-
-            if class_driver_stats.empty:
-                st.info("No driver lead data for this class.")
-            else:
-                st.dataframe(
-                    class_driver_stats.rename(
-                        columns={
-                            "NUMBER": "Car",
-                            "DRIVER_NAME": "Driver",
-                            "laps_led": "Laps led",
-                            "pct_led": "% of race led"
-                        }
-                    )[["Car", "Driver", "Laps led", "% of race led"]],
-                    use_container_width=True,
-                    hide_index=True
-                )
+            st.dataframe(
+                ds.rename(columns={
+                    "NUMBER": "Car",
+                    "DRIVER_NAME": "Driver",
+                    "laps_led": "Laps led",
+                    "pct_led": "% of class race led"
+                })[["Car", "Driver", "Laps led", "% of class race led"]],
+                use_container_width=True,
+                hide_index=True
+            )

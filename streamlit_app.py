@@ -131,6 +131,33 @@ if page in ["Overview", "Team by team", "Team season comparison", "Track analysi
 # --- Page Header ---
 st.header(f"{selected_year} {selected_series} – {selected_event_key.capitalize()} Analysis")
 
+# --- Team color mapping --- 
+team_colors = { 
+    'Cadillac Hertz Team JOTA': '#d4af37', 
+    'Peugeot TotalEnergies': '#BBD64D', 
+    'Ferrari AF Corse': '#d62728', 
+    'Toyota Gazoo Racing': '#000000', 
+    'BMW M Team WRT': '#2426a8', 
+    'Porsche Penske Motorsport': '#ffffff', 
+    'Alpine Endurance Team': '#2673e2', 
+    'Aston Martin Thor Team': '#01655c', 
+    'AF Corse': '#FCE903', 
+    'Proton Competition': '#fcfcff', 
+    'WRT': '#2426a8', 
+    'United Autosports': '#FF8000', 
+    'Akkodis ASP': '#ff443b', 
+    'Iron Dames': '#e5017d', 
+    'Manthey': '#0192cf', 
+    'Heart of Racing': '#242c3f', 
+    'Racing Spirit of Leman': '#428ca8', 
+    'Iron Lynx': '#fefe00', 
+    'TF Sport': '#eaaa1d', 
+    'Cadillac Wayne Taylor Racing': 
+    '#0E3463', 'JDC-Miller MotorSports': 
+    '#F8D94A', 
+    'Acura Meyer Shank Racing w/Curb Agajanian': '#E6662C', 
+    'Cadillac Whelen': '#D53C35' }
+
 # --- Pages ---
 if page == "Overview":
     show_race_stats(df)          # ← NEW STATS SECTION

@@ -50,22 +50,28 @@ def laps_to_ranges(laps):
 
 
 # =========================
-# Helper: HOUR parsing
+# Helper: HOUR parsing with fractional seconds support
 # =========================
 
 def parse_hour_to_datetime(hour_series: pd.Series) -> pd.Series:
     """
-    Parse HOUR column (string like "13:42:10") to datetime,
+    Parse HOUR column (string like "13:42:10.123") to datetime,
     assuming same race day (arbitrary date).
+    Handles fractional seconds.
     """
     base_date = datetime(2026, 1, 1)
 
     def parse_time(t):
-        try:
-            dt = datetime.strptime(t, "%H:%M:%S")
-            return datetime.combine(base_date, dt.time())
-        except Exception:
+        if pd.isna(t):
             return pd.NaT
+        t = str(t).strip()
+        for fmt in ("%H:%M:%S.%f", "%H:%M:%S"):
+            try:
+                dt = datetime.strptime(t, fmt)
+                return datetime.combine(base_date, dt.time())
+            except Exception:
+                continue
+        return pd.NaT
 
     return hour_series.apply(parse_time)
 
@@ -78,14 +84,14 @@ def get_overall_leader_by_lap(df):
     """
     Determine the overall leader per lap, accounting for FCY conditions:
     - On FCY laps, carry forward previous leader if still classified and not crossing line in pit.
-    - Otherwise, pick car with earliest HOUR, then ELAPSED as fallback.
+    - Otherwise, pick car with earliest HOUR (with fractional seconds), then ELAPSED as fallback.
     """
 
     df = df.copy()
     df["ELAPSED"] = parse_elapsed_to_timedelta(df["ELAPSED"])
     df["HOUR_DT"] = parse_hour_to_datetime(df["HOUR"])
 
-    # Sort for deterministic processing by LAP_NUMBER, HOUR_DT, then ELAPSED
+    # Sort for deterministic processing by LAP_NUMBER, HOUR_DT (with fractional seconds), then ELAPSED
     df = df.sort_values(["LAP_NUMBER", "HOUR_DT", "ELAPSED"])
 
     leaders = []

@@ -117,7 +117,7 @@ def get_overall_leader_by_lap(df):
         prev_leader_car_id = leader_row["CAR_ID"]
 
     leaders_df = pd.DataFrame(leaders)
-    return leaders_df[["LAP_NUMBER", "CAR_ID", "NUMBER", "DRIVER_NAME", "CLASS", "FLAG_AT_FL"]], df
+    return leaders_df[["LAP_NUMBER", "CAR_ID", "NUMBER", "DRIVER_NAME", "CLASS", "FLAG_AT_FL"]]
 
 
 def get_class_leader_by_lap(df):
@@ -230,7 +230,7 @@ def show_race_stats(df):
     df = df.copy()
     df["ELAPSED"] = parse_elapsed_to_timedelta(df["ELAPSED"])
 
-    overall_leader_df, processed_df = get_overall_leader_by_lap(df)
+    overall_leader_df = get_overall_leader_by_lap(df)
     class_leader_df = get_class_leader_by_lap(df)
 
     # --- Headline metrics ---
@@ -302,19 +302,14 @@ def show_race_stats(df):
                 hide_index=True
             )
 
-    # --- DEBUG: Show first 30 laps detailed order table ---
+    # --- Debug: Show first 30 laps with positions based on HOUR ---
+    first_30_laps = df[df["LAP_NUMBER"] <= 30].copy()
+    first_30_laps["HOUR_DT"] = parse_hour_to_datetime(first_30_laps["HOUR"])
+    first_30_laps = first_30_laps.sort_values(["LAP_NUMBER", "HOUR_DT"])
 
-    st.markdown("## Debug: First 30 laps order with HOUR and ELAPSED")
+    ranked = first_30_laps.groupby("LAP_NUMBER")["HOUR_DT"].rank(method="first")
+    first_30_laps["POSITION_IN_LAP"] = ranked.where(ranked.notna(), other=9999).astype(int)
 
-    first_30_laps = processed_df[processed_df["LAP_NUMBER"] <= 30].copy()
-
-    # Sort by lap, then HOUR_DT and ELAPSED to reflect processing order
-    first_30_laps = first_30_laps.sort_values(["LAP_NUMBER", "HOUR_DT", "ELAPSED"])
-
-    # Add a position column per lap based on HOUR_DT order
-    first_30_laps["POSITION_IN_LAP"] = first_30_laps.groupby("LAP_NUMBER")["HOUR_DT"].rank(method="first").astype(int)
-
-    # Select columns to display
     debug_cols = ["LAP_NUMBER", "POSITION_IN_LAP", "NUMBER", "DRIVER_NAME", "HOUR", "ELAPSED"]
-
-    st.dataframe(first_30_laps[debug_cols], use_container_width=True)
+    st.markdown("## Debug: First 30 laps position, HOUR, and ELAPSED")
+    st.dataframe(first_30_laps[debug_cols].reset_index(drop=True), use_container_width=True)

@@ -309,22 +309,24 @@ def show_race_stats(df):
                 hide_index=True
             )
 
-    # --- Debug: Show first 30 laps with positions based on HOUR, by class tabs ---
-    first_30_laps = df[df["LAP_NUMBER"] <= 30].copy()
-    first_30_laps["HOUR_DT"] = parse_hour_to_datetime(first_30_laps["HOUR"])
-    first_30_laps = first_30_laps.sort_values(["LAP_NUMBER", "HOUR_DT"])
+    # --- Debug: Show laps 325 to 341 with positions based on HOUR, by class tabs ---
+    debug_laps_range = (325, 341)
+    debug_laps_df = df[(df["LAP_NUMBER"] >= debug_laps_range[0]) & (df["LAP_NUMBER"] <= debug_laps_range[1])].copy()
+    debug_laps_df["HOUR_DT"] = parse_hour_to_datetime(debug_laps_df["HOUR"])
+    debug_laps_df = debug_laps_df.sort_values(["LAP_NUMBER", "HOUR_DT"])
 
-    ranked = first_30_laps.groupby("LAP_NUMBER")["HOUR_DT"].rank(method="first")
-    first_30_laps["POSITION_IN_LAP"] = ranked.where(ranked.notna(), other=9999).astype(int)
+    ranked = debug_laps_df.groupby("LAP_NUMBER")["HOUR_DT"].rank(method="first")
+    debug_laps_df["POSITION_IN_LAP"] = ranked.where(ranked.notna(), other=9999).astype(int)
 
-    st.markdown("## Debug: First 30 laps position, HOUR, and ELAPSED by class")
+    st.markdown(f"## Debug: Laps {debug_laps_range[0]} to {debug_laps_range[1]} position, HOUR, and ELAPSED by class")
 
     debug_cols = ["LAP_NUMBER", "POSITION_IN_LAP", "NUMBER", "DRIVER_NAME", "HOUR", "ELAPSED", "CLASS"]
 
-    classes_for_debug = sorted(first_30_laps["CLASS"].dropna().unique())
+    classes_for_debug = sorted(debug_laps_df["CLASS"].dropna().unique())
     debug_tabs = st.tabs(classes_for_debug)
 
     for tab, cls in zip(debug_tabs, classes_for_debug):
         with tab:
-            class_df = first_30_laps[first_30_laps["CLASS"] == cls]
+            class_df = debug_laps_df[debug_laps_df["CLASS"] == cls]
             st.dataframe(class_df[debug_cols].reset_index(drop=True), use_container_width=True)
+

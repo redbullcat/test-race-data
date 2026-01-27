@@ -2,6 +2,7 @@ import os
 import re
 import pandas as pd
 import streamlit as st
+from datetime import datetime
 
 from pace_chart import show_pace_chart
 from lap_position_chart import show_lap_position_chart
@@ -132,6 +133,21 @@ if page in ["Overview", "Team by team", "Team season comparison", "Track analysi
         df["NUMBER"]
     )
 
+    # --- NEW: extract race start date from race file name ---
+    # Expected format example: Daytona_20260124.csv
+    race_filename = selected_event["race_file"]
+    date_match = re.search(r"_(\d{8})", race_filename)
+    if date_match:
+        date_str = date_match.group(1)  # e.g. '20260124'
+        try:
+            race_start_date = datetime.strptime(date_str, "%Y%m%d").date()
+        except ValueError:
+            race_start_date = None
+            st.warning(f"Could not parse race start date from filename '{race_filename}'.")
+    else:
+        race_start_date = None
+        st.warning(f"No date found in race filename '{race_filename}'.")
+
 # --- Page Header ---
 st.header(f"{selected_year} {selected_series} – {selected_event_key.capitalize()} Analysis")
 
@@ -159,11 +175,15 @@ team_colors = {
     'Cadillac Wayne Taylor Racing': '#0E3463', 
     'JDC-Miller MotorSports': '#F8D94A', 
     'Acura Meyer Shank Racing w/Curb Agajanian': '#E6662C', 
-    'Cadillac Whelen': '#D53C35' }
+    'Cadillac Whelen': '#D53C35' 
+}
 
 # --- Pages ---
 if page == "Overview":
-    show_race_stats(df)          # ← NEW STATS SECTION
+    if race_start_date is None:
+        st.error("Race start date not found or invalid. Cannot properly parse HOUR column.")
+        st.stop()
+    show_race_stats(df, race_start_date)          # ← UPDATED to pass race_start_date
     show_pace_chart(df, team_colors)
     show_driver_pace_chart(df, team_colors)
     show_lap_position_chart(df, team_colors)

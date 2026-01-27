@@ -50,41 +50,44 @@ def laps_to_ranges(laps):
 
 
 # =========================
-# Helper: HOUR parsing with rollover handling
+# Helper: HOUR parsing with PER-CAR rollover
 # =========================
 
-def parse_hour_with_date_and_rollover(hour_series: pd.Series, race_start_date: datetime.date) -> pd.Series:
+def parse_hour_with_date_and_rollover(df: pd.DataFrame, race_start_date: datetime.date) -> pd.Series:
     """
     Parse HOUR strings to full datetime objects using race start date,
-    handling rollover past midnight by incrementing the date accordingly.
+    handling rollover past midnight PER CAR.
+
+    Assumes LAP_NUMBER increases monotonically per car.
     """
-    def to_time(t):
-        try:
-            return datetime.strptime(t, "%H:%M:%S.%f").time()
-        except ValueError:
+
+    def parse_time(val):
+        for fmt in ("%H:%M:%S.%f", "%H:%M:%S"):
             try:
-                return datetime.strptime(t, "%H:%M:%S").time()
+                return datetime.strptime(val, fmt).time()
             except Exception:
-                return None
+                continue
+        return None
 
-    last_time = None
-    current_date = race_start_date
-    parsed_datetimes = []
+    hour_dt = pd.Series(index=df.index, dtype="datetime64[ns]")
 
-    for t in hour_series:
-        time_val = to_time(t)
-        if time_val is None:
-            parsed_datetimes.append(pd.NaT)
-            continue
+    for car_id, car_df in df.sort_values("LAP_NUMBER").groupby("CAR_ID"):
+        current_date = race_start_date
+        last_time = None
 
-        if last_time and time_val < last_time:
-            # rollover past midnight
-            current_date += timedelta(days=1)
+        for idx, row in car_df.iterrows():
+            t = parse_time(row["HOUR"])
+            if t is None:
+                hour_dt.loc[idx] = pd.NaT
+                continue
 
-        last_time = time_val
-        parsed_datetimes.append(datetime.combine(current_date, time_val))
+            if last_time and t < last_time:
+                current_date += timedelta(days=1)
 
-    return pd.Series(parsed_datetimes, index=hour_series.index)
+            last_time = t
+            hour_dt.loc[idx] = datetime.combine(current_date, t)
+
+    return hour_dt
 
 
 # =========================
@@ -100,9 +103,9 @@ def get_overall_leader_by_lap(df, race_start_date):
 
     df = df.copy()
     df["ELAPSED"] = parse_elapsed_to_timedelta(df["ELAPSED"])
-    df["HOUR_DT"] = parse_hour_with_date_and_rollover(df["HOUR"], race_start_date)
+    df["HOUR_DT"] = parse_hour_with_date_and_rollover(df, race_start_date)
 
-    # Sort for deterministic processing by LAP_NUMBER, HOUR_DT, then ELAPSED
+    # Deterministic ordering
     df = df.sort_values(["LAP_NUMBER", "HOUR_DT", "ELAPSED"])
 
     leaders = []
@@ -112,21 +115,16 @@ def get_overall_leader_by_lap(df, race_start_date):
     for lap in laps:
         lap_df = df[df["LAP_NUMBER"] == lap]
 
-        # Exclude cars crossing finish line in pit (value "B")
         eligible_lap_df = lap_df[lap_df["CROSSING_FINISH_LINE_IN_PIT"] != "B"].copy()
+        if eligible_lap_df.empty:
+            eligible_lap_df = lap_df.copy()
 
         flag = lap_df["FLAG_AT_FL"].dropna().unique()
         flag = flag[0] if len(flag) == 1 else None
 
-        if eligible_lap_df.empty:
-            eligible_lap_df = lap_df.copy()
-
         if flag == "FCY" and prev_leader_car_id is not None:
-            prev_leader_rows = eligible_lap_df[eligible_lap_df["CAR_ID"] == prev_leader_car_id]
-            if not prev_leader_rows.empty:
-                leader_row = prev_leader_rows.iloc[0]
-            else:
-                leader_row = eligible_lap_df.iloc[0]
+            prev_rows = eligible_lap_df[eligible_lap_df["CAR_ID"] == prev_leader_car_id]
+            leader_row = prev_rows.iloc[0] if not prev_rows.empty else eligible_lap_df.iloc[0]
         else:
             leader_row = eligible_lap_df.iloc[0]
 
@@ -139,12 +137,12 @@ def get_overall_leader_by_lap(df, race_start_date):
 
 def get_class_leader_by_lap(df, race_start_date):
     """
-    Similar to overall leader, but per class.
-    Uses ELAPSED only, no carry forward logic for now.
+    Determine class leader per lap using HOUR priority, then ELAPSED.
     """
+
     df = df.copy()
     df["ELAPSED"] = parse_elapsed_to_timedelta(df["ELAPSED"])
-    df["HOUR_DT"] = parse_hour_with_date_and_rollover(df["HOUR"], race_start_date)
+    df["HOUR_DT"] = parse_hour_with_date_and_rollover(df, race_start_date)
 
     return (
         df.sort_values(["LAP_NUMBER", "CLASS", "HOUR_DT", "ELAPSED"])
@@ -155,7 +153,7 @@ def get_class_leader_by_lap(df, race_start_date):
 
 
 # =========================
-# Core metrics and other functions remain unchanged
+# Core metrics
 # =========================
 
 def compute_lead_changes(overall_leader_df):
@@ -244,15 +242,13 @@ def compute_driver_lead_stats_by_class(class_leader_df):
 def show_race_stats(df, race_start_date):
     st.subheader("Race statistics")
 
-    # --- Critical fix: normalize ELAPSED and parse HOUR with rollover ---
     df = df.copy()
     df["ELAPSED"] = parse_elapsed_to_timedelta(df["ELAPSED"])
-    df["HOUR_DT"] = parse_hour_with_date_and_rollover(df["HOUR"], race_start_date)
+    df["HOUR_DT"] = parse_hour_with_date_and_rollover(df, race_start_date)
 
     overall_leader_df = get_overall_leader_by_lap(df, race_start_date)
     class_leader_df = get_class_leader_by_lap(df, race_start_date)
 
-    # --- Headline metrics ---
     col1, col2, col3 = st.columns(3)
 
     with col1:
@@ -264,18 +260,15 @@ def show_race_stats(df, race_start_date):
     with col3:
         st.metric("Total race laps", overall_leader_df["LAP_NUMBER"].nunique())
 
-    # --- Flags ---
     st.markdown("**Laps by flag condition**")
     for flag, count in compute_flag_lap_counts(overall_leader_df).items():
         st.write(f"- **{flag}**: {count} laps")
 
-    # --- Longest stint ---
     car, laps = compute_longest_lead_stint(overall_leader_df)
     st.markdown(
         f"**Longest uninterrupted overall lead:** Car **{car}** – **{laps} laps**"
     )
 
-    # --- Class leaders ---
     st.markdown("## Laps led by class")
 
     classes = sorted(class_leader_df["CLASS"].dropna().unique())
@@ -320,22 +313,3 @@ def show_race_stats(df, race_start_date):
                 use_container_width=True,
                 hide_index=True
             )
-
-    # --- Debug: Show first 30 laps with positions based on HOUR, by class tabs ---
-    first_30_laps = df[(df["LAP_NUMBER"] >= 1) & (df["LAP_NUMBER"] <= 30)].copy()
-    first_30_laps = first_30_laps.sort_values(["LAP_NUMBER", "HOUR_DT"])
-
-    ranked = first_30_laps.groupby("LAP_NUMBER")["HOUR_DT"].rank(method="first")
-    first_30_laps["POSITION_IN_LAP"] = ranked.where(ranked.notna(), other=9999).astype(int)
-
-    st.markdown("## Debug: First 30 laps position, HOUR, and ELAPSED by class")
-
-    debug_cols = ["LAP_NUMBER", "POSITION_IN_LAP", "NUMBER", "DRIVER_NAME", "HOUR", "ELAPSED", "CLASS"]
-
-    classes_for_debug = sorted(first_30_laps["CLASS"].dropna().unique())
-    debug_tabs = st.tabs(classes_for_debug)
-
-    for tab, cls in zip(debug_tabs, classes_for_debug):
-        with tab:
-            class_df = first_30_laps[first_30_laps["CLASS"] == cls]
-            st.dataframe(class_df[debug_cols].reset_index(drop=True), use_container_width=True)

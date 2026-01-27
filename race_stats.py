@@ -1,6 +1,6 @@
 import pandas as pd
 import streamlit as st
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # =========================
 # Helper: ELAPSED parsing
@@ -50,37 +50,48 @@ def laps_to_ranges(laps):
 
 
 # =========================
-# Helper: HOUR parsing
+# Helper: HOUR parsing with rollover handling
 # =========================
 
-def parse_hour_to_datetime(hour_series: pd.Series) -> pd.Series:
+def parse_hour_with_date_and_rollover(hour_series: pd.Series, race_start_date: datetime.date) -> pd.Series:
     """
-    Parse HOUR column (string like "13:42:10.123") to datetime,
-    assuming same race day (arbitrary date).
-    Supports fractional seconds.
+    Parse HOUR strings to full datetime objects using race start date,
+    handling rollover past midnight by incrementing the date accordingly.
     """
-    base_date = datetime(2026, 1, 1)
-
-    def parse_time(t):
-        if pd.isna(t):
-            return pd.NaT
-        t = str(t).strip()
-        for fmt in ("%H:%M:%S.%f", "%H:%M:%S"):
+    def to_time(t):
+        try:
+            return datetime.strptime(t, "%H:%M:%S.%f").time()
+        except ValueError:
             try:
-                dt = datetime.strptime(t, fmt)
-                return datetime.combine(base_date, dt.time())
+                return datetime.strptime(t, "%H:%M:%S").time()
             except Exception:
-                continue
-        return pd.NaT
+                return None
 
-    return hour_series.apply(parse_time)
+    last_time = None
+    current_date = race_start_date
+    parsed_datetimes = []
+
+    for t in hour_series:
+        time_val = to_time(t)
+        if time_val is None:
+            parsed_datetimes.append(pd.NaT)
+            continue
+
+        if last_time and time_val < last_time:
+            # rollover past midnight
+            current_date += timedelta(days=1)
+
+        last_time = time_val
+        parsed_datetimes.append(datetime.combine(current_date, time_val))
+
+    return pd.Series(parsed_datetimes, index=hour_series.index)
 
 
 # =========================
 # Leader extraction with FCY logic and HOUR priority
 # =========================
 
-def get_overall_leader_by_lap(df):
+def get_overall_leader_by_lap(df, race_start_date):
     """
     Determine the overall leader per lap, accounting for FCY conditions:
     - On FCY laps, carry forward previous leader if still classified and not crossing line in pit.
@@ -89,7 +100,7 @@ def get_overall_leader_by_lap(df):
 
     df = df.copy()
     df["ELAPSED"] = parse_elapsed_to_timedelta(df["ELAPSED"])
-    df["HOUR_DT"] = parse_hour_to_datetime(df["HOUR"])
+    df["HOUR_DT"] = parse_hour_with_date_and_rollover(df["HOUR"], race_start_date)
 
     # Sort for deterministic processing by LAP_NUMBER, HOUR_DT, then ELAPSED
     df = df.sort_values(["LAP_NUMBER", "HOUR_DT", "ELAPSED"])
@@ -126,14 +137,14 @@ def get_overall_leader_by_lap(df):
     return leaders_df[["LAP_NUMBER", "CAR_ID", "NUMBER", "DRIVER_NAME", "CLASS", "FLAG_AT_FL"]]
 
 
-def get_class_leader_by_lap(df):
+def get_class_leader_by_lap(df, race_start_date):
     """
-    Determine class leaders per lap using HOUR (with fractional seconds) first,
-    then ELAPSED as fallback, ordered by LAP_NUMBER and CLASS.
+    Similar to overall leader, but per class.
+    Uses ELAPSED only, no carry forward logic for now.
     """
     df = df.copy()
     df["ELAPSED"] = parse_elapsed_to_timedelta(df["ELAPSED"])
-    df["HOUR_DT"] = parse_hour_to_datetime(df["HOUR"])
+    df["HOUR_DT"] = parse_hour_with_date_and_rollover(df["HOUR"], race_start_date)
 
     return (
         df.sort_values(["LAP_NUMBER", "CLASS", "HOUR_DT", "ELAPSED"])
@@ -230,15 +241,16 @@ def compute_driver_lead_stats_by_class(class_leader_df):
 # Streamlit renderer
 # =========================
 
-def show_race_stats(df):
+def show_race_stats(df, race_start_date):
     st.subheader("Race statistics")
 
-    # --- Critical fix: normalize ELAPSED ---
+    # --- Critical fix: normalize ELAPSED and parse HOUR with rollover ---
     df = df.copy()
     df["ELAPSED"] = parse_elapsed_to_timedelta(df["ELAPSED"])
+    df["HOUR_DT"] = parse_hour_with_date_and_rollover(df["HOUR"], race_start_date)
 
-    overall_leader_df = get_overall_leader_by_lap(df)
-    class_leader_df = get_class_leader_by_lap(df)
+    overall_leader_df = get_overall_leader_by_lap(df, race_start_date)
+    class_leader_df = get_class_leader_by_lap(df, race_start_date)
 
     # --- Headline metrics ---
     col1, col2, col3 = st.columns(3)
@@ -309,24 +321,21 @@ def show_race_stats(df):
                 hide_index=True
             )
 
-    # --- Debug: Show laps 325 to 341 with positions based on HOUR, by class tabs ---
-    debug_laps_range = (325, 341)
-    debug_laps_df = df[(df["LAP_NUMBER"] >= debug_laps_range[0]) & (df["LAP_NUMBER"] <= debug_laps_range[1])].copy()
-    debug_laps_df["HOUR_DT"] = parse_hour_to_datetime(debug_laps_df["HOUR"])
-    debug_laps_df = debug_laps_df.sort_values(["LAP_NUMBER", "HOUR_DT"])
+    # --- Debug: Show first 30 laps with positions based on HOUR, by class tabs ---
+    first_30_laps = df[(df["LAP_NUMBER"] >= 1) & (df["LAP_NUMBER"] <= 30)].copy()
+    first_30_laps = first_30_laps.sort_values(["LAP_NUMBER", "HOUR_DT"])
 
-    ranked = debug_laps_df.groupby("LAP_NUMBER")["HOUR_DT"].rank(method="first")
-    debug_laps_df["POSITION_IN_LAP"] = ranked.where(ranked.notna(), other=9999).astype(int)
+    ranked = first_30_laps.groupby("LAP_NUMBER")["HOUR_DT"].rank(method="first")
+    first_30_laps["POSITION_IN_LAP"] = ranked.where(ranked.notna(), other=9999).astype(int)
 
-    st.markdown(f"## Debug: Laps {debug_laps_range[0]} to {debug_laps_range[1]} position, HOUR, and ELAPSED by class")
+    st.markdown("## Debug: First 30 laps position, HOUR, and ELAPSED by class")
 
     debug_cols = ["LAP_NUMBER", "POSITION_IN_LAP", "NUMBER", "DRIVER_NAME", "HOUR", "ELAPSED", "CLASS"]
 
-    classes_for_debug = sorted(debug_laps_df["CLASS"].dropna().unique())
+    classes_for_debug = sorted(first_30_laps["CLASS"].dropna().unique())
     debug_tabs = st.tabs(classes_for_debug)
 
     for tab, cls in zip(debug_tabs, classes_for_debug):
         with tab:
-            class_df = debug_laps_df[debug_laps_df["CLASS"] == cls]
+            class_df = first_30_laps[first_30_laps["CLASS"] == cls]
             st.dataframe(class_df[debug_cols].reset_index(drop=True), use_container_width=True)
-

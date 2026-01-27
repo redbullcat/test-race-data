@@ -104,14 +104,23 @@ def get_overall_leader_by_lap(df):
         if eligible_lap_df.empty:
             eligible_lap_df = lap_df.copy()
 
+        # --- DEBUG PRINTS ---
+        print(f"\nLap {lap} - Flag: {flag}")
+        print("Eligible cars (excluding pit finish):")
+        debug_cols = ["CAR_ID", "NUMBER", "DRIVER_NAME", "HOUR_DT", "ELAPSED", "CROSSING_FINISH_LINE_IN_PIT"]
+        print(eligible_lap_df[debug_cols].to_string(index=False))
+
         if flag == "FCY" and prev_leader_car_id is not None:
             prev_leader_rows = eligible_lap_df[eligible_lap_df["CAR_ID"] == prev_leader_car_id]
             if not prev_leader_rows.empty:
                 leader_row = prev_leader_rows.iloc[0]
+                print(f"FCY lap - carrying forward previous leader CAR_ID {prev_leader_car_id}")
             else:
                 leader_row = eligible_lap_df.iloc[0]
+                print(f"FCY lap - previous leader not eligible, picking earliest car CAR_ID {leader_row['CAR_ID']}")
         else:
             leader_row = eligible_lap_df.iloc[0]
+            print(f"Non-FCY lap - picking earliest car CAR_ID {leader_row['CAR_ID']}")
 
         leaders.append(leader_row)
         prev_leader_car_id = leader_row["CAR_ID"]

@@ -240,4 +240,4 @@ def show_race_stats(df):
         st.metric("Overall lead changes", compute_lead_changes(overall_leader_df))
 
     with col2:
-        st.metric("Cars that led overall", overall
+        st.metric("Cars that led overall", overall_leader_df["CAR_ID"].nunique())

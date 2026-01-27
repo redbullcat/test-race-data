@@ -1,6 +1,6 @@
 import pandas as pd
 import streamlit as st
-
+from datetime import datetime
 
 # =========================
 # Helper: ELAPSED parsing
@@ -50,64 +50,73 @@ def laps_to_ranges(laps):
 
 
 # =========================
-# Leader extraction with FCY logic
+# Helper: HOUR parsing
+# =========================
+
+def parse_hour_to_datetime(hour_series: pd.Series) -> pd.Series:
+    """
+    Parse HOUR column (string like "13:42:10") to datetime,
+    assuming same race day (arbitrary date).
+    """
+    base_date = datetime(2026, 1, 1)
+
+    def parse_time(t):
+        try:
+            dt = datetime.strptime(t, "%H:%M:%S")
+            return datetime.combine(base_date, dt.time())
+        except Exception:
+            return pd.NaT
+
+    return hour_series.apply(parse_time)
+
+
+# =========================
+# Leader extraction with FCY logic and HOUR priority
 # =========================
 
 def get_overall_leader_by_lap(df):
     """
     Determine the overall leader per lap, accounting for FCY conditions:
     - On FCY laps, carry forward previous leader if still classified and not crossing line in pit.
-    - Otherwise, pick car with lowest ELAPSED on the lap.
+    - Otherwise, pick car with earliest HOUR, then ELAPSED as fallback.
     """
 
     df = df.copy()
     df["ELAPSED"] = parse_elapsed_to_timedelta(df["ELAPSED"])
+    df["HOUR_DT"] = parse_hour_to_datetime(df["HOUR"])
 
-    # Sort for deterministic processing
-    df = df.sort_values(["LAP_NUMBER", "ELAPSED"])
+    # Sort for deterministic processing by LAP_NUMBER, HOUR_DT, then ELAPSED
+    df = df.sort_values(["LAP_NUMBER", "HOUR_DT", "ELAPSED"])
 
-    # Prepare output rows
     leaders = []
-
-    # Group data by lap for iteration
     laps = df["LAP_NUMBER"].unique()
     prev_leader_car_id = None
 
     for lap in laps:
         lap_df = df[df["LAP_NUMBER"] == lap]
 
-        # Filter out cars crossing finish line in pit (value "B" means crossing in pit)
+        # Exclude cars crossing finish line in pit (value "B")
         eligible_lap_df = lap_df[lap_df["CROSSING_FINISH_LINE_IN_PIT"] != "B"].copy()
 
         flag = lap_df["FLAG_AT_FL"].dropna().unique()
-        flag = flag[0] if len(flag) == 1 else None  # Expect one unique flag per lap ideally
+        flag = flag[0] if len(flag) == 1 else None
 
-        # If no eligible cars (unlikely), fallback to full lap_df
         if eligible_lap_df.empty:
             eligible_lap_df = lap_df.copy()
 
-        # Logic for FCY laps
         if flag == "FCY" and prev_leader_car_id is not None:
-            # Check if previous leader still classified and eligible on this lap
             prev_leader_rows = eligible_lap_df[eligible_lap_df["CAR_ID"] == prev_leader_car_id]
-
             if not prev_leader_rows.empty:
-                # Previous leader remains leader for this lap
                 leader_row = prev_leader_rows.iloc[0]
             else:
-                # Previous leader not eligible: find car with lowest ELAPSED
-                leader_row = eligible_lap_df.nsmallest(1, "ELAPSED").iloc[0]
-
+                leader_row = eligible_lap_df.iloc[0]
         else:
-            # Green or other flag laps: leader is car with lowest ELAPSED
-            leader_row = eligible_lap_df.nsmallest(1, "ELAPSED").iloc[0]
+            leader_row = eligible_lap_df.iloc[0]
 
         leaders.append(leader_row)
         prev_leader_car_id = leader_row["CAR_ID"]
 
     leaders_df = pd.DataFrame(leaders)
-
-    # Select only relevant columns for output
     return leaders_df[["LAP_NUMBER", "CAR_ID", "NUMBER", "DRIVER_NAME", "CLASS", "FLAG_AT_FL"]]
 
 
@@ -231,64 +240,4 @@ def show_race_stats(df):
         st.metric("Overall lead changes", compute_lead_changes(overall_leader_df))
 
     with col2:
-        st.metric("Cars that led overall", overall_leader_df["CAR_ID"].nunique())
-
-    with col3:
-        st.metric("Total race laps", overall_leader_df["LAP_NUMBER"].nunique())
-
-    # --- Flags ---
-    st.markdown("**Laps by flag condition**")
-    for flag, count in compute_flag_lap_counts(overall_leader_df).items():
-        st.write(f"- **{flag}**: {count} laps")
-
-    # --- Longest stint ---
-    car, laps = compute_longest_lead_stint(overall_leader_df)
-    st.markdown(
-        f"**Longest uninterrupted overall lead:** Car **{car}** – **{laps} laps**"
-    )
-
-    # --- Class leaders ---
-    st.markdown("## Laps led by class")
-
-    classes = sorted(class_leader_df["CLASS"].dropna().unique())
-    tabs = st.tabs(classes)
-
-    car_stats = compute_car_lead_stats_by_class(class_leader_df)
-    driver_stats = compute_driver_lead_stats_by_class(class_leader_df)
-
-    for tab, cls in zip(tabs, classes):
-        with tab:
-            st.markdown("### Cars")
-            cs = car_stats[car_stats["CLASS"] == cls]
-
-            st.dataframe(
-                cs.rename(columns={
-                    "NUMBER": "Car",
-                    "CAR_ID": "Car ID",
-                    "laps_led": "Laps led",
-                    "laps_range": "Laps led (ranges)",
-                    "pct_led": "% of class race led"
-                })[
-                    ["Car", "Car ID", "Laps led", "Laps led (ranges)", "% of class race led"]
-                ],
-                use_container_width=True,
-                hide_index=True
-            )
-
-            st.markdown("### Drivers")
-            ds = driver_stats[driver_stats["CLASS"] == cls]
-
-            st.dataframe(
-                ds.rename(columns={
-                    "NUMBER": "Car",
-                    "CAR_ID": "Car ID",
-                    "DRIVER_NAME": "Driver",
-                    "laps_led": "Laps led",
-                    "laps_range": "Laps led (ranges)",
-                    "pct_led": "% of class race led"
-                })[
-                    ["Car", "Car ID", "Driver", "Laps led", "Laps led (ranges)", "% of class race led"]
-                ],
-                use_container_width=True,
-                hide_index=True
-            )
+        st.metric("Cars that led overall", overall

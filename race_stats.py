@@ -50,19 +50,75 @@ def laps_to_ranges(laps):
 
 
 # =========================
-# Leader extraction
+# Leader extraction with FCY logic
 # =========================
 
 def get_overall_leader_by_lap(df):
-    return (
-        df.sort_values(["LAP_NUMBER", "ELAPSED"])
-          .groupby("LAP_NUMBER", as_index=False)
-          .first()
-          [["LAP_NUMBER", "CAR_ID", "NUMBER", "DRIVER_NAME", "CLASS", "FLAG_AT_FL"]]
-    )
+    """
+    Determine the overall leader per lap, accounting for FCY conditions:
+    - On FCY laps, carry forward previous leader if still classified and not crossing line in pit.
+    - Otherwise, pick car with lowest ELAPSED on the lap.
+    """
+
+    df = df.copy()
+    df["ELAPSED"] = parse_elapsed_to_timedelta(df["ELAPSED"])
+
+    # Sort for deterministic processing
+    df = df.sort_values(["LAP_NUMBER", "ELAPSED"])
+
+    # Prepare output rows
+    leaders = []
+
+    # Group data by lap for iteration
+    laps = df["LAP_NUMBER"].unique()
+    prev_leader_car_id = None
+
+    for lap in laps:
+        lap_df = df[df["LAP_NUMBER"] == lap]
+
+        # Filter out cars crossing finish line in pit (value "B" means crossing in pit)
+        eligible_lap_df = lap_df[lap_df["CROSSING_FINISH_LINE_IN_PIT"] != "B"].copy()
+
+        flag = lap_df["FLAG_AT_FL"].dropna().unique()
+        flag = flag[0] if len(flag) == 1 else None  # Expect one unique flag per lap ideally
+
+        # If no eligible cars (unlikely), fallback to full lap_df
+        if eligible_lap_df.empty:
+            eligible_lap_df = lap_df.copy()
+
+        # Logic for FCY laps
+        if flag == "FCY" and prev_leader_car_id is not None:
+            # Check if previous leader still classified and eligible on this lap
+            prev_leader_rows = eligible_lap_df[eligible_lap_df["CAR_ID"] == prev_leader_car_id]
+
+            if not prev_leader_rows.empty:
+                # Previous leader remains leader for this lap
+                leader_row = prev_leader_rows.iloc[0]
+            else:
+                # Previous leader not eligible: find car with lowest ELAPSED
+                leader_row = eligible_lap_df.nsmallest(1, "ELAPSED").iloc[0]
+
+        else:
+            # Green or other flag laps: leader is car with lowest ELAPSED
+            leader_row = eligible_lap_df.nsmallest(1, "ELAPSED").iloc[0]
+
+        leaders.append(leader_row)
+        prev_leader_car_id = leader_row["CAR_ID"]
+
+    leaders_df = pd.DataFrame(leaders)
+
+    # Select only relevant columns for output
+    return leaders_df[["LAP_NUMBER", "CAR_ID", "NUMBER", "DRIVER_NAME", "CLASS", "FLAG_AT_FL"]]
 
 
 def get_class_leader_by_lap(df):
+    """
+    Similar to overall leader, but per class.
+    Uses ELAPSED only, no carry forward logic for now.
+    """
+    df = df.copy()
+    df["ELAPSED"] = parse_elapsed_to_timedelta(df["ELAPSED"])
+
     return (
         df.sort_values(["LAP_NUMBER", "CLASS", "ELAPSED"])
           .groupby(["LAP_NUMBER", "CLASS"], as_index=False)
@@ -72,7 +128,7 @@ def get_class_leader_by_lap(df):
 
 
 # =========================
-# Core metrics
+# Core metrics and other functions remain unchanged
 # =========================
 
 def compute_lead_changes(overall_leader_df):
@@ -102,10 +158,6 @@ def compute_longest_lead_stint(overall_leader_df):
     top = stints.iloc[0]
     return top["NUMBER"], int(top["laps_led"])
 
-
-# =========================
-# Class-based stats
-# =========================
 
 def compute_car_lead_stats_by_class(class_leader_df):
     total_laps = (

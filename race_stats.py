@@ -88,14 +88,6 @@ def get_overall_leader_by_lap(df):
     # Sort for deterministic processing by LAP_NUMBER, HOUR_DT, then ELAPSED
     df = df.sort_values(["LAP_NUMBER", "HOUR_DT", "ELAPSED"])
 
-    # --- DEBUG: Print order table for first 30 laps ---
-    first_30_laps = df[df["LAP_NUMBER"] <= 30].copy()
-    # Position by ELAPSED ascending per lap
-    first_30_laps["POSITION"] = first_30_laps.groupby("LAP_NUMBER")["ELAPSED"].rank(method="first")
-    debug_cols = ["LAP_NUMBER", "POSITION", "HOUR_DT", "ELAPSED", "CAR_ID", "NUMBER", "DRIVER_NAME"]
-    print("\n=== DEBUG: First 30 laps order by ELAPSED ===")
-    print(first_30_laps[debug_cols].sort_values(["LAP_NUMBER", "POSITION"]).to_string(index=False))
-
     leaders = []
     laps = df["LAP_NUMBER"].unique()
     prev_leader_car_id = None
@@ -112,29 +104,20 @@ def get_overall_leader_by_lap(df):
         if eligible_lap_df.empty:
             eligible_lap_df = lap_df.copy()
 
-        # --- DEBUG PRINTS ---
-        print(f"\nLap {lap} - Flag: {flag}")
-        print("Eligible cars (excluding pit finish):")
-        debug_cols = ["CAR_ID", "NUMBER", "DRIVER_NAME", "HOUR_DT", "ELAPSED", "CROSSING_FINISH_LINE_IN_PIT"]
-        print(eligible_lap_df[debug_cols].to_string(index=False))
-
         if flag == "FCY" and prev_leader_car_id is not None:
             prev_leader_rows = eligible_lap_df[eligible_lap_df["CAR_ID"] == prev_leader_car_id]
             if not prev_leader_rows.empty:
                 leader_row = prev_leader_rows.iloc[0]
-                print(f"FCY lap - carrying forward previous leader CAR_ID {prev_leader_car_id}")
             else:
                 leader_row = eligible_lap_df.iloc[0]
-                print(f"FCY lap - previous leader not eligible, picking earliest car CAR_ID {leader_row['CAR_ID']}")
         else:
             leader_row = eligible_lap_df.iloc[0]
-            print(f"Non-FCY lap - picking earliest car CAR_ID {leader_row['CAR_ID']}")
 
         leaders.append(leader_row)
         prev_leader_car_id = leader_row["CAR_ID"]
 
     leaders_df = pd.DataFrame(leaders)
-    return leaders_df[["LAP_NUMBER", "CAR_ID", "NUMBER", "DRIVER_NAME", "CLASS", "FLAG_AT_FL"]]
+    return leaders_df[["LAP_NUMBER", "CAR_ID", "NUMBER", "DRIVER_NAME", "CLASS", "FLAG_AT_FL"]], df
 
 
 def get_class_leader_by_lap(df):
@@ -247,7 +230,7 @@ def show_race_stats(df):
     df = df.copy()
     df["ELAPSED"] = parse_elapsed_to_timedelta(df["ELAPSED"])
 
-    overall_leader_df = get_overall_leader_by_lap(df)
+    overall_leader_df, processed_df = get_overall_leader_by_lap(df)
     class_leader_df = get_class_leader_by_lap(df)
 
     # --- Headline metrics ---
@@ -318,3 +301,20 @@ def show_race_stats(df):
                 use_container_width=True,
                 hide_index=True
             )
+
+    # --- DEBUG: Show first 30 laps detailed order table ---
+
+    st.markdown("## Debug: First 30 laps order with HOUR and ELAPSED")
+
+    first_30_laps = processed_df[processed_df["LAP_NUMBER"] <= 30].copy()
+
+    # Sort by lap, then HOUR_DT and ELAPSED to reflect processing order
+    first_30_laps = first_30_laps.sort_values(["LAP_NUMBER", "HOUR_DT", "ELAPSED"])
+
+    # Add a position column per lap based on HOUR_DT order
+    first_30_laps["POSITION_IN_LAP"] = first_30_laps.groupby("LAP_NUMBER")["HOUR_DT"].rank(method="first").astype(int)
+
+    # Select columns to display
+    debug_cols = ["LAP_NUMBER", "POSITION_IN_LAP", "NUMBER", "DRIVER_NAME", "HOUR", "ELAPSED"]
+
+    st.dataframe(first_30_laps[debug_cols], use_container_width=True)

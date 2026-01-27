@@ -88,6 +88,14 @@ def get_overall_leader_by_lap(df):
     # Sort for deterministic processing by LAP_NUMBER, HOUR_DT, then ELAPSED
     df = df.sort_values(["LAP_NUMBER", "HOUR_DT", "ELAPSED"])
 
+    # --- DEBUG: Print order table for first 30 laps ---
+    first_30_laps = df[df["LAP_NUMBER"] <= 30].copy()
+    # Position by ELAPSED ascending per lap
+    first_30_laps["POSITION"] = first_30_laps.groupby("LAP_NUMBER")["ELAPSED"].rank(method="first")
+    debug_cols = ["LAP_NUMBER", "POSITION", "HOUR_DT", "ELAPSED", "CAR_ID", "NUMBER", "DRIVER_NAME"]
+    print("\n=== DEBUG: First 30 laps order by ELAPSED ===")
+    print(first_30_laps[debug_cols].sort_values(["LAP_NUMBER", "POSITION"]).to_string(index=False))
+
     leaders = []
     laps = df["LAP_NUMBER"].unique()
     prev_leader_car_id = None

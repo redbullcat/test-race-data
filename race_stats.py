@@ -50,14 +50,14 @@ def laps_to_ranges(laps):
 
 
 # =========================
-# Helper: HOUR parsing with fractional seconds support
+# Helper: HOUR parsing
 # =========================
 
 def parse_hour_to_datetime(hour_series: pd.Series) -> pd.Series:
     """
     Parse HOUR column (string like "13:42:10.123") to datetime,
     assuming same race day (arbitrary date).
-    Handles fractional seconds.
+    Supports fractional seconds.
     """
     base_date = datetime(2026, 1, 1)
 
@@ -84,14 +84,14 @@ def get_overall_leader_by_lap(df):
     """
     Determine the overall leader per lap, accounting for FCY conditions:
     - On FCY laps, carry forward previous leader if still classified and not crossing line in pit.
-    - Otherwise, pick car with earliest HOUR (with fractional seconds), then ELAPSED as fallback.
+    - Otherwise, pick car with earliest HOUR, then ELAPSED as fallback.
     """
 
     df = df.copy()
     df["ELAPSED"] = parse_elapsed_to_timedelta(df["ELAPSED"])
     df["HOUR_DT"] = parse_hour_to_datetime(df["HOUR"])
 
-    # Sort for deterministic processing by LAP_NUMBER, HOUR_DT (with fractional seconds), then ELAPSED
+    # Sort for deterministic processing by LAP_NUMBER, HOUR_DT, then ELAPSED
     df = df.sort_values(["LAP_NUMBER", "HOUR_DT", "ELAPSED"])
 
     leaders = []
@@ -128,14 +128,15 @@ def get_overall_leader_by_lap(df):
 
 def get_class_leader_by_lap(df):
     """
-    Similar to overall leader, but per class.
-    Uses ELAPSED only, no carry forward logic for now.
+    Determine class leaders per lap using HOUR (with fractional seconds) first,
+    then ELAPSED as fallback, ordered by LAP_NUMBER and CLASS.
     """
     df = df.copy()
     df["ELAPSED"] = parse_elapsed_to_timedelta(df["ELAPSED"])
+    df["HOUR_DT"] = parse_hour_to_datetime(df["HOUR"])
 
     return (
-        df.sort_values(["LAP_NUMBER", "CLASS", "ELAPSED"])
+        df.sort_values(["LAP_NUMBER", "CLASS", "HOUR_DT", "ELAPSED"])
           .groupby(["LAP_NUMBER", "CLASS"], as_index=False)
           .first()
           [["LAP_NUMBER", "CLASS", "CAR_ID", "NUMBER", "DRIVER_NAME"]]

@@ -1,171 +1,236 @@
+import os
+import re
 import pandas as pd
 import streamlit as st
-st.write("APP STARTED")
+from datetime import datetime
 
+from pace_chart import show_pace_chart
+from lap_position_chart import show_lap_position_chart
+from driver_pace_chart import show_driver_pace_chart
+from driver_pace_comparison_chart import show_driver_pace_comparison
+from team_driver_pace_comparison import show_team_driver_pace_comparison
+from results_table import show_results_table
+from gap_evolution_chart import show_gap_evolution_chart
+from stint_pace_chart import show_stint_pace_chart
+from team_season_comparison import show_team_season_comparison
+from track_analysis import show_track_analysis
+from practice_analysis import show_practice_analysis
+from race_stats import show_race_stats
+from race_tyre_analysis import show_tyre_analysis   # ← NEW IMPORT
 
-# ------------------------------------------------------------
-# Utilities
-# ------------------------------------------------------------
+DATA_DIR = "data"
 
-def parse_pit_time_seconds(val) -> float:
-    """
-    Convert PIT_TIME to seconds.
+# Helper regexes
+RACE_CSV_RE = re.compile(r"^(.+)\.csv$", re.IGNORECASE)
+SESSION_CSV_RE = re.compile(r"^(.+?)_(practice|session)(\d+)\.csv$", re.IGNORECASE)
 
-    Accepts:
-      - mm:ss.xxx
-      - ss.xxx
-      - numeric
-    Returns 0.0 if invalid or missing.
-    """
-    if pd.isna(val):
-        return 0.0
+def get_event_names(series_path):
+    """Return a dict mapping event base names to their race CSV (if any) and session CSVs."""
+    events = {}
+    for f in os.listdir(series_path):
+        if not f.lower().endswith(".csv"):
+            continue
+        race_match = RACE_CSV_RE.match(f)
+        session_match = SESSION_CSV_RE.match(f)
+        if session_match:
+            base_name = session_match.group(1).lower()
+            event = events.setdefault(base_name, {"race_file": None, "sessions": []})
+            event["sessions"].append(f)
+        elif race_match:
+            base_name = race_match.group(1).lower()
+            event = events.setdefault(base_name, {"race_file": None, "sessions": []})
+            event["race_file"] = f
+    return events
 
-    if isinstance(val, (int, float)):
-        return float(val)
+# --- Load available race data ---
+race_files = {}
 
-    s = str(val).strip()
-    if s == "" or s.lower() in {"nan", "na", "none"}:
-        return 0.0
+for year in sorted(os.listdir(DATA_DIR)):
+    year_path = os.path.join(DATA_DIR, year)
+    if not os.path.isdir(year_path):
+        continue
 
-    try:
-        # mm:ss.xxx
-        if ":" in s:
-            mins, rest = s.split(":", 1)
-            return int(mins) * 60 + float(rest)
-        # ss.xxx
-        return float(s)
-    except ValueError:
-        return 0.0
+    series_dict = {}
 
+    for series in sorted(os.listdir(year_path)):
+        series_path = os.path.join(year_path, series)
+        if not os.path.isdir(series_path):
+            continue
 
-def detect_pit_laps(df: pd.DataFrame) -> pd.Series:
-    """
-    Identify pit laps using multiple signals.
-    """
-    return (
-        (df["CROSSING_FINISH_LINE_IN_PIT"] == 1)
-        | (df["PIT_TIME_SECONDS"] > 0)
+        events = get_event_names(series_path)
+        if events:
+            series_dict[series] = events
+
+    if series_dict:
+        race_files[year] = series_dict
+
+# --- Sidebar Selectors ---
+st.sidebar.header("Configuration")
+
+selected_series = st.sidebar.selectbox("Series", ["IMSA", "FIA WEC"])
+
+page = st.sidebar.selectbox(
+    "Page",
+    ["Overview", "Team by team", "Team season comparison", "Track analysis", "Practice / Test analysis"]
+)
+
+selected_year = st.sidebar.selectbox(
+    "Year",
+    sorted(race_files.keys(), reverse=True)
+)
+
+available_series_for_year = race_files[selected_year].keys()
+
+if selected_series not in available_series_for_year:
+    st.error(f"No {selected_series} data available for {selected_year}.")
+    st.stop()
+
+events_for_series = race_files[selected_year][selected_series]
+
+def event_display_name(event_key, event_data):
+    if event_data["race_file"] is None and event_data["sessions"]:
+        return f"{event_key.capitalize()} (Test Sessions)"
+    else:
+        return event_key.capitalize()
+
+event_keys = sorted(events_for_series.keys())
+display_names = [event_display_name(k, events_for_series[k]) for k in event_keys]
+
+selected_event_idx = st.sidebar.selectbox(
+    "Race",
+    range(len(event_keys)),
+    format_func=lambda i: display_names[i]
+)
+
+selected_event_key = event_keys[selected_event_idx]
+selected_event = events_for_series[selected_event_key]
+
+# --- Load data ---
+if page in ["Overview", "Team by team", "Team season comparison", "Track analysis"]:
+    if selected_event["race_file"] is None:
+        st.error(f"No main race CSV found for {selected_event_key}.")
+        st.stop()
+
+    file_path = os.path.join(DATA_DIR, selected_year, selected_series, selected_event["race_file"])
+    df = pd.read_csv(file_path, delimiter=";")
+    df.columns = df.columns.str.strip()
+
+    if "\ufeffNUMBER" in df.columns:
+        df.rename(columns={"\ufeffNUMBER": "NUMBER"}, inplace=True)
+
+    df["YEAR"] = selected_year
+    df["SERIES"] = selected_series
+
+    df["NUMBER"] = df["NUMBER"].astype(str).str.strip()
+    df["TEAM"] = df["TEAM"].astype(str).str.strip()
+
+    df["CAR_ID"] = (
+        df["YEAR"].astype(str) + "_" +
+        df["SERIES"].astype(str) + "_" +
+        df["TEAM"] + "_" +
+        df["NUMBER"]
     )
 
+    # --- Extract race start date from filename ---
+    race_filename = selected_event["race_file"]
+    date_match = re.search(r"_(\d{8})", race_filename)
+    if date_match:
+        try:
+            race_start_date = datetime.strptime(date_match.group(1), "%Y%m%d").date()
+        except ValueError:
+            race_start_date = None
+            st.warning(f"Could not parse race start date from filename '{race_filename}'.")
+    else:
+        race_start_date = None
+        st.warning(f"No date found in race filename '{race_filename}'.")
 
-# ------------------------------------------------------------
-# Tyre stint inference
-# ------------------------------------------------------------
+# --- Page Header ---
+st.header(f"{selected_year} {selected_series} – {selected_event_key.capitalize()} Analysis")
 
-def infer_tyre_stints(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Infer tyre stints using pit laps, driver changes and pit duration.
-    """
-    df = df.copy()
+# --- Team color mapping ---
+team_colors = {
+    'Cadillac Hertz Team JOTA': '#d4af37',
+    'Peugeot TotalEnergies': '#BBD64D',
+    'Ferrari AF Corse': '#d62728',
+    'Toyota Gazoo Racing': '#000000',
+    'BMW M Team WRT': '#2426a8',
+    'Porsche Penske Motorsport': '#ffffff',
+    'Alpine Endurance Team': '#2673e2',
+    'Aston Martin Thor Team': '#01655c',
+    'AF Corse': '#FCE903',
+    'Proton Competition': '#fcfcff',
+    'WRT': '#2426a8',
+    'United Autosports': '#FF8000',
+    'Akkodis ASP': '#ff443b',
+    'Iron Dames': '#e5017d',
+    'Manthey': '#0192cf',
+    'Heart of Racing': '#242c3f',
+    'Racing Spirit of Leman': '#428ca8',
+    'Iron Lynx': '#fefe00',
+    'TF Sport': '#eaaa1d',
+    'Cadillac Wayne Taylor Racing': '#0E3463',
+    'JDC-Miller MotorSports': '#F8D94A',
+    'Acura Meyer Shank Racing w/Curb Agajanian': '#E6662C',
+    'Cadillac Whelen': '#D53C35'
+}
 
-    # Ensure numeric pit time exists (parsed once)
-    if "PIT_TIME_SECONDS" not in df.columns:
-        df["PIT_TIME_SECONDS"] = df["PIT_TIME"].apply(parse_pit_time_seconds)
+# --- Pages ---
+if page == "Overview":
+    if race_start_date is None:
+        st.error("Race start date not found or invalid. Cannot properly parse HOUR column.")
+        st.stop()
 
-    # Stable car identifier
-    if "CAR_ID" not in df.columns:
-        df["CAR_ID"] = df["NUMBER"].astype(str) + "_" + df["TEAM"].astype(str)
+    overview_tab, tyre_tab = st.tabs(["Overview", "Tyre analysis"])
 
-    df = df.sort_values(["CAR_ID", "LAP_NUMBER"])
+    with overview_tab:
+        show_race_stats(df, race_start_date)
+        show_pace_chart(df, team_colors)
+        show_driver_pace_chart(df, team_colors)
+        show_lap_position_chart(df, team_colors)
+        show_driver_pace_comparison(df, team_colors)
+        show_results_table(df, team_colors)
+        show_gap_evolution_chart(df, team_colors)
+        show_stint_pace_chart(df, team_colors)
 
-    # Core pit / service flags
-    df["IS_PIT_LAP"] = detect_pit_laps(df)
+    with tyre_tab:
+        show_tyre_analysis(df)
 
-    df["DRIVER_CHANGED"] = (
-        df.groupby("CAR_ID")["DRIVER_NUMBER"]
-        .shift()
-        .ne(df["DRIVER_NUMBER"])
+elif page == "Team by team":
+    race_classes = sorted(df["CLASS"].dropna().unique())
+    if race_classes:
+        tabs = st.tabs(race_classes)
+        for tab, race_class in zip(tabs, race_classes):
+            with tab:
+                class_df = df[df["CLASS"] == race_class]
+                if not class_df.empty:
+                    show_team_driver_pace_comparison(class_df, team_colors)
+
+elif page == "Team season comparison":
+    show_team_season_comparison(df, team_colors)
+
+elif page == "Track analysis":
+    show_track_analysis(df, team_colors)
+
+elif page == "Practice / Test analysis":
+    show_practice_analysis(
+        data_dir=DATA_DIR,
+        year=selected_year,
+        series=selected_series,
+        race=selected_event_key,
+        team_colors=team_colors
     )
 
-    # Define a "full service" heuristic:
-    # - driver change OR long pit stop
-    df["FULL_SERVICE"] = (
-        df["DRIVER_CHANGED"]
-        | (df["PIT_TIME_SECONDS"] >= 30)  # conservative global default
+# --- Debug: Car ID table ---
+with st.expander("Debug: Car IDs"):
+    debug_df = (
+        df[["CAR_ID", "NUMBER", "TEAM", "CLASS"]]
+        .drop_duplicates()
+        .sort_values(["CLASS", "TEAM", "NUMBER"])
+        .reset_index(drop=True)
     )
 
-    # A new tyre stint starts after a full service
-    df["NEW_TYRES"] = df["FULL_SERVICE"].shift().fillna(False)
-
-    # Tyre stint ID per car
-    df["TYRE_STINT_ID"] = (
-        df.groupby("CAR_ID")["NEW_TYRES"]
-        .cumsum()
-        .astype(int)
+    st.dataframe(
+        debug_df,
+        use_container_width=True,
+        hide_index=True
     )
-
-    return df
-
-
-# ------------------------------------------------------------
-# Analysis
-# ------------------------------------------------------------
-
-def tyre_stint_pace_summary(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Summarise pace by tyre stint.
-    """
-    work = df.copy()
-
-    # Require valid lap times
-    work = work[work["LAP_TIME"].notna()]
-
-    summary = (
-        work.groupby(
-            [
-                "CLASS",
-                "CAR_ID",
-                "NUMBER",
-                "TEAM",
-                "DRIVER_NAME",
-                "TYRE_STINT_ID",
-            ],
-            dropna=False,
-        )
-        .agg(
-            laps=("LAP_NUMBER", "count"),
-            avg_lap=("LAP_TIME", "mean"),
-            min_lap=("LAP_TIME", "min"),
-            max_lap=("LAP_TIME", "max"),
-        )
-        .reset_index()
-    )
-
-    return summary
-
-
-# ------------------------------------------------------------
-# Streamlit UI
-# ------------------------------------------------------------
-
-def show_tyre_analysis(df: pd.DataFrame):
-    st.subheader("Tyre stint analysis")
-
-    df = infer_tyre_stints(df)
-    summary = tyre_stint_pace_summary(df)
-
-    classes = sorted(summary["CLASS"].dropna().unique())
-
-    for cls in classes:
-        st.markdown(f"### {cls}")
-
-        cls_df = summary[summary["CLASS"] == cls].copy()
-        cls_df = cls_df.sort_values(
-            ["NUMBER", "TYRE_STINT_ID"]
-        )
-
-        st.dataframe(
-            cls_df[
-                [
-                    "NUMBER",
-                    "TEAM",
-                    "DRIVER_NAME",
-                    "TYRE_STINT_ID",
-                    "laps",
-                    "avg_lap",
-                    "min_lap",
-                    "max_lap",
-                ]
-            ],
-            use_container_width=True,
-        )

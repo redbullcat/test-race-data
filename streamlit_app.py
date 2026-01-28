@@ -193,7 +193,7 @@ if page == "Overview":
         show_stint_pace_chart(df, team_colors)
 
     with tyre_tab:
-        show_tyre_analysis(df)
+        show_tyre_analysis()
 
 elif page == "Team by team":
     race_classes = sorted(df["CLASS"].dropna().unique())

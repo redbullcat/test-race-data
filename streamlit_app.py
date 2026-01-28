@@ -15,7 +15,8 @@ from stint_pace_chart import show_stint_pace_chart
 from team_season_comparison import show_team_season_comparison
 from track_analysis import show_track_analysis
 from practice_analysis import show_practice_analysis
-from race_stats import show_race_stats   # ← NEW IMPORT
+from race_stats import show_race_stats
+from race_tyre_analysis import show_tyre_analysis   # ← NEW IMPORT
 
 DATA_DIR = "data"
 
@@ -117,15 +118,12 @@ if page in ["Overview", "Team by team", "Team season comparison", "Track analysi
     if "\ufeffNUMBER" in df.columns:
         df.rename(columns={"\ufeffNUMBER": "NUMBER"}, inplace=True)
 
-    # Add YEAR and SERIES columns for CAR_ID construction
     df["YEAR"] = selected_year
     df["SERIES"] = selected_series
 
-    # Ensure TEAM and NUMBER are strings with no leading zero stripping
     df["NUMBER"] = df["NUMBER"].astype(str).str.strip()
     df["TEAM"] = df["TEAM"].astype(str).str.strip()
 
-    # Create unique CAR_ID by combining YEAR_SERIES_TEAM_NUMBER
     df["CAR_ID"] = (
         df["YEAR"].astype(str) + "_" +
         df["SERIES"].astype(str) + "_" +
@@ -133,14 +131,12 @@ if page in ["Overview", "Team by team", "Team season comparison", "Track analysi
         df["NUMBER"]
     )
 
-    # --- NEW: extract race start date from race file name ---
-    # Expected format example: Daytona_20260124.csv
+    # --- Extract race start date from filename ---
     race_filename = selected_event["race_file"]
     date_match = re.search(r"_(\d{8})", race_filename)
     if date_match:
-        date_str = date_match.group(1)  # e.g. '20260124'
         try:
-            race_start_date = datetime.strptime(date_str, "%Y%m%d").date()
+            race_start_date = datetime.strptime(date_match.group(1), "%Y%m%d").date()
         except ValueError:
             race_start_date = None
             st.warning(f"Could not parse race start date from filename '{race_filename}'.")
@@ -151,31 +147,31 @@ if page in ["Overview", "Team by team", "Team season comparison", "Track analysi
 # --- Page Header ---
 st.header(f"{selected_year} {selected_series} – {selected_event_key.capitalize()} Analysis")
 
-# --- Team color mapping --- 
-team_colors = { 
-    'Cadillac Hertz Team JOTA': '#d4af37', 
-    'Peugeot TotalEnergies': '#BBD64D', 
-    'Ferrari AF Corse': '#d62728', 
-    'Toyota Gazoo Racing': '#000000', 
-    'BMW M Team WRT': '#2426a8', 
-    'Porsche Penske Motorsport': '#ffffff', 
-    'Alpine Endurance Team': '#2673e2', 
-    'Aston Martin Thor Team': '#01655c', 
-    'AF Corse': '#FCE903', 
-    'Proton Competition': '#fcfcff', 
-    'WRT': '#2426a8', 
-    'United Autosports': '#FF8000', 
-    'Akkodis ASP': '#ff443b', 
-    'Iron Dames': '#e5017d', 
-    'Manthey': '#0192cf', 
-    'Heart of Racing': '#242c3f', 
-    'Racing Spirit of Leman': '#428ca8', 
-    'Iron Lynx': '#fefe00', 
-    'TF Sport': '#eaaa1d', 
-    'Cadillac Wayne Taylor Racing': '#0E3463', 
-    'JDC-Miller MotorSports': '#F8D94A', 
-    'Acura Meyer Shank Racing w/Curb Agajanian': '#E6662C', 
-    'Cadillac Whelen': '#D53C35' 
+# --- Team color mapping ---
+team_colors = {
+    'Cadillac Hertz Team JOTA': '#d4af37',
+    'Peugeot TotalEnergies': '#BBD64D',
+    'Ferrari AF Corse': '#d62728',
+    'Toyota Gazoo Racing': '#000000',
+    'BMW M Team WRT': '#2426a8',
+    'Porsche Penske Motorsport': '#ffffff',
+    'Alpine Endurance Team': '#2673e2',
+    'Aston Martin Thor Team': '#01655c',
+    'AF Corse': '#FCE903',
+    'Proton Competition': '#fcfcff',
+    'WRT': '#2426a8',
+    'United Autosports': '#FF8000',
+    'Akkodis ASP': '#ff443b',
+    'Iron Dames': '#e5017d',
+    'Manthey': '#0192cf',
+    'Heart of Racing': '#242c3f',
+    'Racing Spirit of Leman': '#428ca8',
+    'Iron Lynx': '#fefe00',
+    'TF Sport': '#eaaa1d',
+    'Cadillac Wayne Taylor Racing': '#0E3463',
+    'JDC-Miller MotorSports': '#F8D94A',
+    'Acura Meyer Shank Racing w/Curb Agajanian': '#E6662C',
+    'Cadillac Whelen': '#D53C35'
 }
 
 # --- Pages ---
@@ -183,14 +179,21 @@ if page == "Overview":
     if race_start_date is None:
         st.error("Race start date not found or invalid. Cannot properly parse HOUR column.")
         st.stop()
-    show_race_stats(df, race_start_date)          # ← UPDATED to pass race_start_date
-    show_pace_chart(df, team_colors)
-    show_driver_pace_chart(df, team_colors)
-    show_lap_position_chart(df, team_colors)
-    show_driver_pace_comparison(df, team_colors)
-    show_results_table(df, team_colors)
-    show_gap_evolution_chart(df, team_colors)
-    show_stint_pace_chart(df, team_colors)
+
+    overview_tab, tyre_tab = st.tabs(["Overview", "Tyre analysis"])
+
+    with overview_tab:
+        show_race_stats(df, race_start_date)
+        show_pace_chart(df, team_colors)
+        show_driver_pace_chart(df, team_colors)
+        show_lap_position_chart(df, team_colors)
+        show_driver_pace_comparison(df, team_colors)
+        show_results_table(df, team_colors)
+        show_gap_evolution_chart(df, team_colors)
+        show_stint_pace_chart(df, team_colors)
+
+    with tyre_tab:
+        show_tyre_analysis(df)
 
 elif page == "Team by team":
     race_classes = sorted(df["CLASS"].dropna().unique())

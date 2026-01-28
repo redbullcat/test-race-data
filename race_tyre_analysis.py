@@ -4,6 +4,7 @@ import pdfplumber
 import re
 import os
 
+
 def extract_pitnotes_info(pdf_path: str):
     with pdfplumber.open(pdf_path) as pdf:
         all_text = []
@@ -12,20 +13,28 @@ def extract_pitnotes_info(pdf_path: str):
             if text:
                 all_text.extend([(line, i + 1) for line in text.split("\n")])
 
+    # Keep all lines that contain the word "pits"
     pit_lines = [
         (line, page_num)
         for (line, page_num) in all_text
         if re.search(r"\bpits\b", line.lower())
     ]
 
+    # 🔴 RESTORED ROBUST REGEX (this is the key difference)
     pattern = re.compile(
         r"At\s(?P<local_time>\d{1,2}:\d{2}\s(?:am|pm))\s"
         r"\((?P<race_time>(?:\d+h\s)?\d+m)\)\s"
         r"(?P<driver>.+?)\s"
         r"\(#(?P<car_number>\d+)-(?P<class>\w+)[^\)]*\)\s"
         r"(?P<pos_type>CP|OP):\s\d+,\s?pits\.?\s"
-        r"(?P<actions>[^\.]+)\.?\s"
-        r"(?:DC:\s(?P<driver_change>[^\.]+))?\.?\s"
+        r"(?P<actions>"
+        r"fuel(?: only|, tires?)?"
+        r"(?:, driver change)?"
+        r"|fuel, tires"
+        r"|fuel, tires, driver change"
+        r"|fuel only"
+        r")\.?"
+        r"(?:\sDC:\s(?P<driver_change>[^\.]+))?\.?\s"
         r"Pit Lane:\s(?P<pit_time>\d{2}:\d{2})",
         re.IGNORECASE
     )
@@ -134,6 +143,7 @@ def show_tyre_analysis():
                 file_name=f"{race_name}_pitnotes_parsed.csv",
                 mime="text/csv"
             )
+
 
 if __name__ == "__main__":
     show_tyre_analysis()

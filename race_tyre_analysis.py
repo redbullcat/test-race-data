@@ -1,5 +1,6 @@
 import pandas as pd
 
+
 def time_str_to_seconds(t):
     if pd.isna(t):
         return 0.0
@@ -19,17 +20,10 @@ def time_str_to_seconds(t):
     except ValueError:
         return 0.0
 
-def detect_pit_laps(df: pd.DataFrame) -> pd.Series:
-    """Identify pit laps using multiple signals."""
-    return (
-        (df["CROSSING_FINISH_LINE_IN_PIT"] == 1)
-        | (df["PIT_TIME"].fillna(0).apply(time_str_to_seconds) > 0)
-    )
 
 def infer_tyre_stints(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
 
-    # Convert PIT_TIME strings to seconds for numeric comparison
     df["PIT_TIME_SECONDS"] = df["PIT_TIME"].apply(time_str_to_seconds)
 
     class_pit_time_thresholds = {
@@ -37,7 +31,6 @@ def infer_tyre_stints(df: pd.DataFrame) -> pd.DataFrame:
         "LMP3": 15,
         "GTD": 12,
         "GTD Pro": 12,
-        # Add other classes if needed
     }
 
     def pit_includes_tyres(row):
@@ -69,12 +62,31 @@ def infer_tyre_stints(df: pd.DataFrame) -> pd.DataFrame:
 
     return df
 
+
 def tyre_stint_pace_summary(df: pd.DataFrame) -> pd.DataFrame:
     work = df.copy()
-    # Convert LAP_TIME strings to seconds for numeric aggregation
-    work["LAP_TIME_SEC"] = work["LAP_TIME"].apply(time_str_to_seconds)
 
+    work["LAP_TIME_SEC"] = work["LAP_TIME"].apply(time_str_to_seconds)
     work = work[work["LAP_TIME_SEC"].notna()]
+
+    # Identify the pit lap that *started* each stint
+    pit_events = (
+        work[work["PIT_LAP"]]
+        .sort_values(["CAR_ID", "LAP_NUMBER"])
+        .groupby(["CAR_ID", "TYRE_STINT_ID"], as_index=False)
+        .first()[["CAR_ID", "TYRE_STINT_ID", "LAP_NUMBER", "HOUR", "PIT_TIME_SECONDS"]]
+        .rename(
+            columns={
+                "LAP_NUMBER": "STOP_LAP",
+                "HOUR": "STOP_TIME",
+            }
+        )
+    )
+
+    pit_events["TOOK_TYRES"] = pit_events["PIT_TIME_SECONDS"] > 0
+    pit_events["TYRES"] = pit_events["TOOK_TYRES"].apply(
+        lambda x: "✅" if x else ""
+    )
 
     summary = (
         work.groupby(
@@ -96,7 +108,16 @@ def tyre_stint_pace_summary(df: pd.DataFrame) -> pd.DataFrame:
         .reset_index()
     )
 
+    summary = summary.merge(
+        pit_events,
+        on=["CAR_ID", "TYRE_STINT_ID"],
+        how="left",
+    )
+
+    summary = summary.drop(columns=["PIT_TIME_SECONDS"], errors="ignore")
+
     return summary
+
 
 def show_tyre_analysis(df: pd.DataFrame):
     import streamlit as st
@@ -104,28 +125,35 @@ def show_tyre_analysis(df: pd.DataFrame):
     st.subheader("Tyre stint analysis")
 
     df = infer_tyre_stints(df)
-
     summary = tyre_stint_pace_summary(df)
 
     classes = sorted(summary["CLASS"].dropna().unique())
-
     if not classes:
         st.write("No tyre stint data available.")
         return
 
     tabs = st.tabs(classes)
+
     for tab, race_class in zip(tabs, classes):
         with tab:
             class_df = summary[summary["CLASS"] == race_class]
 
             teams = sorted(class_df["TEAM"].dropna().unique())
-            selected_team = st.selectbox(f"Select team ({race_class})", ["All"] + teams, key=f"team_{race_class}")
+            selected_team = st.selectbox(
+                f"Select team ({race_class})",
+                ["All"] + teams,
+                key=f"team_{race_class}",
+            )
 
             if selected_team != "All":
                 class_df = class_df[class_df["TEAM"] == selected_team]
 
             cars = sorted(class_df["CAR_ID"].dropna().unique())
-            selected_car = st.selectbox(f"Select car ({race_class})", ["All"] + cars, key=f"car_{race_class}")
+            selected_car = st.selectbox(
+                f"Select car ({race_class})",
+                ["All"] + cars,
+                key=f"car_{race_class}",
+            )
 
             if selected_car != "All":
                 class_df = class_df[class_df["CAR_ID"] == selected_car]
@@ -134,4 +162,21 @@ def show_tyre_analysis(df: pd.DataFrame):
                 st.write("No data for the selected filters.")
                 continue
 
-            st.dataframe(class_df, use_container_width=True)
+            display_cols = [
+                "TEAM",
+                "CAR_ID",
+                "DRIVER_NUMBER",
+                "TYRE_STINT_ID",
+                "laps",
+                "avg_lap",
+                "min_lap",
+                "max_lap",
+                "STOP_LAP",
+                "STOP_TIME",
+                "TYRES",
+            ]
+
+            st.dataframe(
+                class_df[display_cols],
+                use_container_width=True,
+            )

@@ -1,118 +1,131 @@
 import pandas as pd
 import streamlit as st
-from typing import Dict
 
-# =========================
-# Helpers
-# =========================
 
-def parse_lap_time(series: pd.Series) -> pd.Series:
-    """Parse LAP_TIME to timedelta."""
-    return pd.to_timedelta(series, errors="coerce")
+# ------------------------------------------------------------
+# Utilities
+# ------------------------------------------------------------
+
+def parse_pit_time_seconds(val) -> float:
+    """
+    Convert PIT_TIME to seconds.
+
+    Accepts:
+      - mm:ss.xxx
+      - ss.xxx
+      - numeric
+    Returns 0.0 if invalid or missing.
+    """
+    if pd.isna(val):
+        return 0.0
+
+    if isinstance(val, (int, float)):
+        return float(val)
+
+    s = str(val).strip()
+    if s == "" or s.lower() in {"nan", "na", "none"}:
+        return 0.0
+
+    try:
+        # mm:ss.xxx
+        if ":" in s:
+            mins, rest = s.split(":", 1)
+            return int(mins) * 60 + float(rest)
+        # ss.xxx
+        return float(s)
+    except ValueError:
+        return 0.0
 
 
 def detect_pit_laps(df: pd.DataFrame) -> pd.Series:
-    """Identify pit laps using multiple signals."""
+    """
+    Identify pit laps using multiple signals.
+    """
     return (
         (df["CROSSING_FINISH_LINE_IN_PIT"] == 1)
-        | (df["PIT_TIME"].fillna(0) > 0)
+        | (df["PIT_TIME_SECONDS"] > 0)
     )
 
 
-# =========================
-# Class-specific pit thresholds
-# =========================
-
-def compute_class_pit_thresholds(df: pd.DataFrame) -> Dict[str, float]:
-    """
-    Compute class-specific PIT_TIME thresholds using IQR method
-    to separate fuel-only stops from tyre changes.
-    """
-    pit_df = df[df["IS_PIT_LAP"] & df["PIT_TIME"].notna()]
-    thresholds = {}
-
-    for cls, g in pit_df.groupby("CLASS"):
-        q1 = g["PIT_TIME"].quantile(0.25)
-        q3 = g["PIT_TIME"].quantile(0.75)
-        iqr = q3 - q1
-        thresholds[cls] = q3 + 1.5 * iqr
-
-    return thresholds
-
-
-# =========================
+# ------------------------------------------------------------
 # Tyre stint inference
-# =========================
+# ------------------------------------------------------------
 
 def infer_tyre_stints(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.sort_values(["CAR_ID", "LAP_NUMBER"]).copy()
+    """
+    Infer tyre stints using pit laps, driver changes and pit duration.
+    """
+    df = df.copy()
 
-    # Core flags
+    # Ensure numeric pit time exists (parsed once)
+    if "PIT_TIME_SECONDS" not in df.columns:
+        df["PIT_TIME_SECONDS"] = df["PIT_TIME"].apply(parse_pit_time_seconds)
+
+    # Stable car identifier
+    if "CAR_ID" not in df.columns:
+        df["CAR_ID"] = df["NUMBER"].astype(str) + "_" + df["TEAM"].astype(str)
+
+    df = df.sort_values(["CAR_ID", "LAP_NUMBER"])
+
+    # Core pit / service flags
     df["IS_PIT_LAP"] = detect_pit_laps(df)
 
     df["DRIVER_CHANGED"] = (
-        df.groupby("CAR_ID")["DRIVER_NUMBER"].shift()
-        != df["DRIVER_NUMBER"]
+        df.groupby("CAR_ID")["DRIVER_NUMBER"]
+        .shift()
+        .ne(df["DRIVER_NUMBER"])
     )
 
-    thresholds = compute_class_pit_thresholds(df)
-
-    df["LONG_PIT"] = df.apply(
-        lambda r: r["PIT_TIME"] >= thresholds.get(r["CLASS"], float("inf")),
-        axis=1
+    # Define a "full service" heuristic:
+    # - driver change OR long pit stop
+    df["FULL_SERVICE"] = (
+        df["DRIVER_CHANGED"]
+        | (df["PIT_TIME_SECONDS"] >= 30)  # conservative global default
     )
 
-    # Tyre reset logic
-    df["TYRE_RESET"] = df["DRIVER_CHANGED"] | df["LONG_PIT"]
+    # A new tyre stint starts after a full service
+    df["NEW_TYRES"] = df["FULL_SERVICE"].shift().fillna(False)
 
-    # Tyre stint ID (per car)
+    # Tyre stint ID per car
     df["TYRE_STINT_ID"] = (
-        df.groupby("CAR_ID")["TYRE_RESET"].cumsum()
+        df.groupby("CAR_ID")["NEW_TYRES"]
+        .cumsum()
+        .astype(int)
     )
-
-    # Fuel-only stop inside same tyre stint
-    df["FUEL_ONLY_STOP"] = df["IS_PIT_LAP"] & ~df["TYRE_RESET"]
-
-    # Segment within tyre stint (1 = first run, 2 = double-stint, etc.)
-    df["TYRE_STINT_SEGMENT"] = (
-        df.groupby(["CAR_ID", "TYRE_STINT_ID"])["FUEL_ONLY_STOP"]
-          .cumsum()
-          .add(1)
-    )
-
-    # Valid pace laps: exclude pit-in and out-laps
-    df["VALID_PACE_LAP"] = (
-        ~df["IS_PIT_LAP"]
-        & ~df.groupby("CAR_ID")["IS_PIT_LAP"].shift(-1).fillna(False)
-    )
-
-    df["LAP_TIME"] = parse_lap_time(df["LAP_TIME"])
 
     return df
 
 
-# =========================
-# Aggregation
-# =========================
+# ------------------------------------------------------------
+# Analysis
+# ------------------------------------------------------------
 
 def tyre_stint_pace_summary(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Compare average lap time between segments on same tyre set.
+    Summarise pace by tyre stint.
     """
-    pace_df = df[df["VALID_PACE_LAP"] & df["LAP_TIME"].notna()]
+    work = df.copy()
+
+    # Require valid lap times
+    work = work[work["LAP_TIME"].notna()]
 
     summary = (
-        pace_df
-        .groupby([
-            "CLASS",
-            "CAR_ID",
-            "NUMBER",
-            "TYRE_STINT_ID",
-            "TYRE_STINT_SEGMENT",
-        ])
+        work.groupby(
+            [
+                "CLASS",
+                "CAR_ID",
+                "NUMBER",
+                "TEAM",
+                "DRIVER_NAME",
+                "TYRE_STINT_ID",
+            ],
+            dropna=False,
+        )
         .agg(
-            laps=("LAP_TIME", "count"),
-            avg_lap_time=("LAP_TIME", "mean"),
+            laps=("LAP_NUMBER", "count"),
+            avg_lap=("LAP_TIME", "mean"),
+            min_lap=("LAP_TIME", "min"),
+            max_lap=("LAP_TIME", "max"),
         )
         .reset_index()
     )
@@ -120,9 +133,9 @@ def tyre_stint_pace_summary(df: pd.DataFrame) -> pd.DataFrame:
     return summary
 
 
-# =========================
+# ------------------------------------------------------------
 # Streamlit UI
-# =========================
+# ------------------------------------------------------------
 
 def show_tyre_analysis(df: pd.DataFrame):
     st.subheader("Tyre stint analysis")
@@ -131,31 +144,27 @@ def show_tyre_analysis(df: pd.DataFrame):
     summary = tyre_stint_pace_summary(df)
 
     classes = sorted(summary["CLASS"].dropna().unique())
-    tabs = st.tabs(classes)
 
-    for tab, cls in zip(tabs, classes):
-        with tab:
-            cls_df = summary[summary["CLASS"] == cls]
+    for cls in classes:
+        st.markdown(f"### {cls}")
 
-            st.markdown("### Tyre stint pace comparison")
+        cls_df = summary[summary["CLASS"] == cls].copy()
+        cls_df = cls_df.sort_values(
+            ["NUMBER", "TYRE_STINT_ID"]
+        )
 
-            pivot = (
-                cls_df
-                .pivot_table(
-                    index=["CAR_ID", "NUMBER", "TYRE_STINT_ID"],
-                    columns="TYRE_STINT_SEGMENT",
-                    values="avg_lap_time"
-                )
-                .reset_index()
-            )
-
-            if 1 in pivot.columns and 2 in pivot.columns:
-                pivot["Δ Segment 2 - Segment 1"] = pivot[2] - pivot[1]
-
-            st.dataframe(
-                pivot,
-                use_container_width=True,
-                hide_index=True
-            )
-
-    return df
+        st.dataframe(
+            cls_df[
+                [
+                    "NUMBER",
+                    "TEAM",
+                    "DRIVER_NAME",
+                    "TYRE_STINT_ID",
+                    "laps",
+                    "avg_lap",
+                    "min_lap",
+                    "max_lap",
+                ]
+            ],
+            use_container_width=True,
+        )

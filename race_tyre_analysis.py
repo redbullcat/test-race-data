@@ -83,7 +83,6 @@ def tyre_stint_pace_summary(df: pd.DataFrame) -> pd.DataFrame:
                 "TEAM",
                 "CAR_ID",
                 "TYRE_STINT_ID",
-                "TYRE_COMPOUND",
                 "DRIVER_NUMBER",
             ],
             dropna=False,

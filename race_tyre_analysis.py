@@ -1,147 +1,75 @@
 import streamlit as st
 import pandas as pd
 import pdfplumber
-import requests
-import tempfile
 import re
+import os
 
-
-# ----------------------------
-# PDF download
-# ----------------------------
-
-def download_pdf(url: str) -> str:
-    response = requests.get(url)
-    response.raise_for_status()
-
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
-    tmp.write(response.content)
-    tmp.close()
-
-    return tmp.name
-
-
-# ----------------------------
-# Extract text with page refs
-# ----------------------------
-
-def extract_pdf_lines(pdf_path: str) -> list[dict]:
-    rows = []
-
+def extract_pitnotes_info(pdf_path: str):
     with pdfplumber.open(pdf_path) as pdf:
-        for page_num, page in enumerate(pdf.pages, start=1):
+        all_text = []
+        for i, page in enumerate(pdf.pages):
             text = page.extract_text()
-            if not text:
-                continue
+            if text:
+                all_text.extend([(line, i+1) for line in text.split("\n")])
+    pit_lines = [(line, page_num) for (line, page_num) in all_text if 'pits' in line.lower()]
 
-            for line in text.split("\n"):
-                rows.append(
-                    {
-                        "PAGE": page_num,
-                        "RAW_LINE": line.strip(),
-                    }
-                )
-
-    return rows
-
-
-# ----------------------------
-# Parse pit stop lines
-# ----------------------------
-
-def parse_pit_lines(lines: list[dict]) -> pd.DataFrame:
-    pit_lines = [
-        row for row in lines
-        if "pits" in row["RAW_LINE"].lower()
-    ]
-
-    records = []
-
-    for row in pit_lines:
-        text = row["RAW_LINE"]
-
-        # Time of day
-        clock_time = None
-        m = re.search(r"At\s+([0-9:]+\s*(?:am|pm))", text, re.IGNORECASE)
-        if m:
-            clock_time = m.group(1)
-
-        # Time into race
-        race_time = None
-        m = re.search(r"\((\d+h\s*\d+m)\)", text)
-        if m:
-            race_time = m.group(1)
-
-        # Car + class
-        car = None
-        car_class = None
-        m = re.search(r"#(\d+)-([A-Z0-9]+)", text)
-        if m:
-            car = m.group(1)
-            car_class = m.group(2)
-
-        # Pit lane time
-        pit_lane_time = None
-        m = re.search(r"Pit Lane:\s*([0-9:.]+)", text)
-        if m:
-            pit_lane_time = m.group(1)
-
-        records.append(
-            {
-                "PAGE": row["PAGE"],
-                "CLOCK_TIME": clock_time,
-                "RACE_TIME": race_time,
-                "CAR": car,
-                "CLASS": car_class,
-                "FUEL_ONLY": "Fuel only" in text,
-                "FUEL_TYRES": "Fuel, tires" in text,
-                "DRIVER_CHANGE": "DC:" in text,
-                "PIT_LANE_TIME": pit_lane_time,
-                "RAW_LINE": text,
-            }
-        )
-
-    return pd.DataFrame(records)
-
-
-# ----------------------------
-# Streamlit entry point
-# ----------------------------
-
-def show_tyre_analysis(df=None):
-    """
-    This intentionally ignores the race CSV.
-    It is a standalone PitNotes PDF parser.
-    """
-
-    st.subheader("Pit lane activity (PitNotes PDF)")
-
-    pdf_url = st.text_input(
-        "PitNotes PDF URL",
-        value="https://www.pitnotes.org/files/IMSA/2026/1/Report01.pdf",
+    pattern = re.compile(
+        r"At\s(?P<local_time>\d{1,2}:\d{2}\s(?:am|pm))\s\(\d+h\s\d+m\)\s"
+        r"(?P<driver>.+?)\s\(#(?P<car_number>\d+)-(?P<class>\w+)\s.+?\)\s"
+        r"(?P<pos>\w+):\s\d+,\s?pits\.?\s"
+        r"(?P<actions>.+?)\.\sDC:\s(?P<driver_change>.+?)\.\s"
+        r"Pit Lane:\s(?P<pit_time>\d{2}:\d{2})"
     )
 
-    if st.button("Parse PitNotes PDF"):
-        with st.spinner("Downloading PDF…"):
-            pdf_path = download_pdf(pdf_url)
+    data = []
+    for line, page_num in pit_lines:
+        match = pattern.search(line)
+        if match:
+            d = match.groupdict()
+            actions_text = d['actions'].lower()
+            fuel_only = 'fuel only' in actions_text
+            fuel_tires = 'fuel, tires' in actions_text or 'fuel, tyre' in actions_text
+            full_service = 'fuel, tires, driver change' in actions_text or 'fuel, tyres, driver change' in actions_text
+            driver_change = d['driver_change'].strip() != '' or full_service
+            data.append({
+                'Local Time': d['local_time'],
+                'Car Number': d['car_number'],
+                'Class': d['class'],
+                'Driver': d['driver'].strip(),
+                'Position Type': d['pos'],
+                'Fuel Only': fuel_only,
+                'Fuel + Tires': fuel_tires,
+                'Full Service': full_service,
+                'Driver Change': driver_change,
+                'Pit Lane Time': d['pit_time'],
+                'Page': page_num
+            })
 
-        with st.spinner("Extracting text…"):
-            lines = extract_pdf_lines(pdf_path)
+    df = pd.DataFrame(data)
+    return df
 
-        with st.spinner("Parsing pit stops…"):
-            pit_df = parse_pit_lines(lines)
+def show_tyre_analysis():
+    st.header("IMSA Pit Notes Analysis")
 
-        st.success(f"Found {len(pit_df)} pit stop entries")
+    year = st.text_input("Enter race year", "2026")
+    series = st.text_input("Enter series", "IMSA")
+    race_name = st.text_input("Enter race name (filename prefix)", "Daytona")
 
-        st.dataframe(
-            pit_df,
-            use_container_width=True,
-            height=600,
-        )
+    pdf_path = os.path.join("data", year, series, f"{race_name}_pitnotes.pdf")
 
-        st.download_button(
-            label="Download CSV",
-            data=pit_df.to_csv(index=False),
-            file_name="pitnotes_pitstops.csv",
-            mime="text/csv",
-        )
+    if not os.path.exists(pdf_path):
+        st.error(f"PDF file not found at {pdf_path}")
+        return
+
+    st.write(f"Reading pit notes PDF from: {pdf_path}")
+
+    if st.button("Parse Pit Notes PDF"):
+        with st.spinner("Parsing PDF..."):
+            df = extract_pitnotes_info(pdf_path)
+            if df.empty:
+                st.warning("No pit notes entries found.")
+            else:
+                st.dataframe(df)
+
+if __name__ == "__main__":
+    show_tyre_analysis()

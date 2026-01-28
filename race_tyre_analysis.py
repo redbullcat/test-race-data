@@ -37,10 +37,9 @@ def extract_pitnotes_info(pdf_path: str):
                 'Class': d['class'],
                 'Driver': d['driver'].strip(),
                 'Position Type': d['pos'],
-                'Fuel Only': fuel_only,
-                'Fuel + Tires': fuel_tires,
-                'Full Service': full_service,
-                'Driver Change': driver_change,
+                'Fuel only': fuel_only,
+                'Fuel, tires': fuel_tires,
+                'DC': driver_change,
                 'Pit Lane Time': d['pit_time'],
                 'Page': page_num
             })

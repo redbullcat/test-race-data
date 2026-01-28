@@ -11,14 +11,21 @@ def extract_pitnotes_info(pdf_path: str):
             text = page.extract_text()
             if text:
                 all_text.extend([(line, i+1) for line in text.split("\n")])
-    pit_lines = [(line, page_num) for (line, page_num) in all_text if 'pits' in line.lower()]
 
+    # Filter lines with "pits" or "pit"
+    pit_lines = [(line, page_num) for (line, page_num) in all_text if re.search(r"\bpits\b", line.lower())]
+
+    # Regex with optional DC and flexible position
     pattern = re.compile(
-        r"At\s(?P<local_time>\d{1,2}:\d{2}\s(?:am|pm))\s\(\d+h\s\d+m\)\s"
-        r"(?P<driver>.+?)\s\(#(?P<car_number>\d+)-(?P<class>\w+)\s.+?\)\s"
-        r"(?P<pos>\w+):\s\d+,\s?pits\.?\s"
-        r"(?P<actions>.+?)\.\sDC:\s(?P<driver_change>.+?)\.\s"
-        r"Pit Lane:\s(?P<pit_time>\d{2}:\d{2})"
+        r"At\s(?P<local_time>\d{1,2}:\d{2}\s(?:am|pm))\s"
+        r"\((?P<race_time>(?:\d+h\s)?\d+m)\)\s"
+        r"(?P<driver>.+?)\s"
+        r"\(#(?P<car_number>\d+)-(?P<class>\w+)[^\)]*\)\s"
+        r"(?P<pos_type>CP|OP):\s\d+,\s?pits\.?\s"
+        r"(?P<actions>fuel(?: only|, tires?)?(?:, driver change)?|fuel, tires|fuel, tires, driver change|fuel only)\.?"
+        r"(?:\sDC:\s(?P<driver_change>[^\.]+))?\.?\s"
+        r"Pit Lane:\s(?P<pit_time>\d{2}:\d{2})",
+        re.IGNORECASE
     )
 
     data = []
@@ -29,17 +36,18 @@ def extract_pitnotes_info(pdf_path: str):
             actions_text = d['actions'].lower()
             fuel_only = 'fuel only' in actions_text
             fuel_tires = 'fuel, tires' in actions_text or 'fuel, tyre' in actions_text
-            full_service = 'fuel, tires, driver change' in actions_text or 'fuel, tyres, driver change' in actions_text
-            driver_change = d['driver_change'].strip() != '' or full_service
+            driver_change = bool(d['driver_change']) or 'driver change' in actions_text
+
             data.append({
                 'Local Time': d['local_time'],
+                'Race Time': d['race_time'],
                 'Car Number': d['car_number'],
                 'Class': d['class'],
                 'Driver': d['driver'].strip(),
-                'Position Type': d['pos'],
+                'Position Type': d['pos_type'],
                 'Fuel only': fuel_only,
                 'Fuel, tires': fuel_tires,
-                'DC': driver_change,
+                'Driver Change': driver_change,
                 'Pit Lane Time': d['pit_time'],
                 'Page': page_num
             })

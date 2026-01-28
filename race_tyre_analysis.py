@@ -12,10 +12,8 @@ def extract_pitnotes_info(pdf_path: str):
             if text:
                 all_text.extend([(line, i+1) for line in text.split("\n")])
 
-    # Filter lines with "pits" or "pit"
     pit_lines = [(line, page_num) for (line, page_num) in all_text if re.search(r"\bpits\b", line.lower())]
 
-    # Regex with optional DC and flexible position
     pattern = re.compile(
         r"At\s(?P<local_time>\d{1,2}:\d{2}\s(?:am|pm))\s"
         r"\((?P<race_time>(?:\d+h\s)?\d+m)\)\s"
@@ -38,12 +36,16 @@ def extract_pitnotes_info(pdf_path: str):
             fuel_tires = 'fuel, tires' in actions_text or 'fuel, tyre' in actions_text
             driver_change = bool(d['driver_change']) or 'driver change' in actions_text
 
+            driver_out = d['driver'].strip()
+            driver_in = d['driver_change'].strip() if d['driver_change'] else driver_out
+
             data.append({
                 'Local Time': d['local_time'],
                 'Race Time': d['race_time'],
                 'Car Number': d['car_number'],
                 'Class': d['class'],
-                'Driver': d['driver'].strip(),
+                'Driver Out': driver_out,
+                'Driver In': driver_in,
                 'Position Type': d['pos_type'],
                 'Fuel only': fuel_only,
                 'Fuel, tires': fuel_tires,
@@ -75,8 +77,30 @@ def show_tyre_analysis():
             df = extract_pitnotes_info(pdf_path)
             if df.empty:
                 st.warning("No pit notes entries found.")
-            else:
-                st.dataframe(df)
+                return
+
+            # Filters
+            classes = sorted(df["Class"].unique())
+            selected_class = st.selectbox("Select Class", ["All"] + classes)
+            if selected_class != "All":
+                df = df[df["Class"] == selected_class]
+
+            cars = sorted(df["Car Number"].unique())
+            selected_car = st.selectbox("Select Car Number", ["All"] + cars)
+            if selected_car != "All":
+                df = df[df["Car Number"] == selected_car]
+
+            drivers = sorted(set(df["Driver Out"].unique()).union(df["Driver In"].unique()))
+            selected_driver = st.selectbox("Select Driver (Driver Out or In)", ["All"] + drivers)
+            if selected_driver != "All":
+                df = df[(df["Driver Out"] == selected_driver) | (df["Driver In"] == selected_driver)]
+
+            st.dataframe(df)
+
+            # Export CSV
+            csv_path = os.path.join("data", year, series, f"{race_name}_pitnotes_parsed.csv")
+            df.to_csv(csv_path, index=False)
+            st.success(f"Parsed data saved to CSV: {csv_path}")
 
 if __name__ == "__main__":
     show_tyre_analysis()

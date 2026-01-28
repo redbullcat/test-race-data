@@ -1,182 +1,147 @@
+import streamlit as st
 import pandas as pd
+import pdfplumber
+import requests
+import tempfile
+import re
 
 
-def time_str_to_seconds(t):
-    if pd.isna(t):
-        return 0.0
-    s = str(t).strip()
-    if s == "" or s.lower() in {"nan", "na", "none"}:
-        return 0.0
-    try:
-        parts = s.split(":")
-        if len(parts) == 2:
-            mins, rest = parts
-            return int(mins) * 60 + float(rest)
-        elif len(parts) == 3:
-            hrs, mins, rest = parts
-            return int(hrs) * 3600 + int(mins) * 60 + float(rest)
-        else:
-            return float(s)
-    except ValueError:
-        return 0.0
+# ----------------------------
+# PDF download
+# ----------------------------
+
+def download_pdf(url: str) -> str:
+    response = requests.get(url)
+    response.raise_for_status()
+
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+    tmp.write(response.content)
+    tmp.close()
+
+    return tmp.name
 
 
-def infer_tyre_stints(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.copy()
+# ----------------------------
+# Extract text with page refs
+# ----------------------------
 
-    df["PIT_TIME_SECONDS"] = df["PIT_TIME"].apply(time_str_to_seconds)
+def extract_pdf_lines(pdf_path: str) -> list[dict]:
+    rows = []
 
-    class_pit_time_thresholds = {
-        "LMP2": 15,
-        "LMP3": 15,
-        "GTD": 12,
-        "GTD Pro": 12,
-    }
-
-    def pit_includes_tyres(row):
-        threshold = class_pit_time_thresholds.get(row["CLASS"], 15)
-        return row["PIT_TIME_SECONDS"] > threshold
-
-    df["PIT_LAP"] = (
-        (df["CROSSING_FINISH_LINE_IN_PIT"] == 1)
-        | df.apply(pit_includes_tyres, axis=1)
-    )
-
-    df["DRIVER_CHANGED"] = (
-        df.groupby("CAR_ID")["DRIVER_NUMBER"].shift() != df["DRIVER_NUMBER"]
-    ).fillna(False)
-
-    df = df.sort_values(["CAR_ID", "LAP_NUMBER"])
-    df["TYRE_STINT_ID"] = 0
-
-    stint_id = 0
-    prev_car = None
-
-    for idx, row in df.iterrows():
-        if row["CAR_ID"] != prev_car:
-            stint_id = 0
-        elif row["PIT_LAP"] and (row["DRIVER_CHANGED"] or row["PIT_TIME_SECONDS"] > 5):
-            stint_id += 1
-        df.at[idx, "TYRE_STINT_ID"] = stint_id
-        prev_car = row["CAR_ID"]
-
-    return df
-
-
-def tyre_stint_pace_summary(df: pd.DataFrame) -> pd.DataFrame:
-    work = df.copy()
-
-    work["LAP_TIME_SEC"] = work["LAP_TIME"].apply(time_str_to_seconds)
-    work = work[work["LAP_TIME_SEC"].notna()]
-
-    # Identify the pit lap that *started* each stint
-    pit_events = (
-        work[work["PIT_LAP"]]
-        .sort_values(["CAR_ID", "LAP_NUMBER"])
-        .groupby(["CAR_ID", "TYRE_STINT_ID"], as_index=False)
-        .first()[["CAR_ID", "TYRE_STINT_ID", "LAP_NUMBER", "HOUR", "PIT_TIME_SECONDS"]]
-        .rename(
-            columns={
-                "LAP_NUMBER": "STOP_LAP",
-                "HOUR": "STOP_TIME",
-            }
-        )
-    )
-
-    pit_events["TOOK_TYRES"] = pit_events["PIT_TIME_SECONDS"] > 0
-    pit_events["TYRES"] = pit_events["TOOK_TYRES"].apply(
-        lambda x: "✅" if x else ""
-    )
-
-    summary = (
-        work.groupby(
-            [
-                "CLASS",
-                "TEAM",
-                "CAR_ID",
-                "TYRE_STINT_ID",
-                "DRIVER_NUMBER",
-            ],
-            dropna=False,
-        )
-        .agg(
-            laps=("LAP_NUMBER", "count"),
-            avg_lap=("LAP_TIME_SEC", "mean"),
-            min_lap=("LAP_TIME_SEC", "min"),
-            max_lap=("LAP_TIME_SEC", "max"),
-        )
-        .reset_index()
-    )
-
-    summary = summary.merge(
-        pit_events,
-        on=["CAR_ID", "TYRE_STINT_ID"],
-        how="left",
-    )
-
-    summary = summary.drop(columns=["PIT_TIME_SECONDS"], errors="ignore")
-
-    return summary
-
-
-def show_tyre_analysis(df: pd.DataFrame):
-    import streamlit as st
-
-    st.subheader("Tyre stint analysis")
-
-    df = infer_tyre_stints(df)
-    summary = tyre_stint_pace_summary(df)
-
-    classes = sorted(summary["CLASS"].dropna().unique())
-    if not classes:
-        st.write("No tyre stint data available.")
-        return
-
-    tabs = st.tabs(classes)
-
-    for tab, race_class in zip(tabs, classes):
-        with tab:
-            class_df = summary[summary["CLASS"] == race_class]
-
-            teams = sorted(class_df["TEAM"].dropna().unique())
-            selected_team = st.selectbox(
-                f"Select team ({race_class})",
-                ["All"] + teams,
-                key=f"team_{race_class}",
-            )
-
-            if selected_team != "All":
-                class_df = class_df[class_df["TEAM"] == selected_team]
-
-            cars = sorted(class_df["CAR_ID"].dropna().unique())
-            selected_car = st.selectbox(
-                f"Select car ({race_class})",
-                ["All"] + cars,
-                key=f"car_{race_class}",
-            )
-
-            if selected_car != "All":
-                class_df = class_df[class_df["CAR_ID"] == selected_car]
-
-            if class_df.empty:
-                st.write("No data for the selected filters.")
+    with pdfplumber.open(pdf_path) as pdf:
+        for page_num, page in enumerate(pdf.pages, start=1):
+            text = page.extract_text()
+            if not text:
                 continue
 
-            display_cols = [
-                "TEAM",
-                "CAR_ID",
-                "DRIVER_NUMBER",
-                "TYRE_STINT_ID",
-                "laps",
-                "avg_lap",
-                "min_lap",
-                "max_lap",
-                "STOP_LAP",
-                "STOP_TIME",
-                "TYRES",
-            ]
+            for line in text.split("\n"):
+                rows.append(
+                    {
+                        "PAGE": page_num,
+                        "RAW_LINE": line.strip(),
+                    }
+                )
 
-            st.dataframe(
-                class_df[display_cols],
-                use_container_width=True,
-            )
+    return rows
+
+
+# ----------------------------
+# Parse pit stop lines
+# ----------------------------
+
+def parse_pit_lines(lines: list[dict]) -> pd.DataFrame:
+    pit_lines = [
+        row for row in lines
+        if "pits" in row["RAW_LINE"].lower()
+    ]
+
+    records = []
+
+    for row in pit_lines:
+        text = row["RAW_LINE"]
+
+        # Time of day
+        clock_time = None
+        m = re.search(r"At\s+([0-9:]+\s*(?:am|pm))", text, re.IGNORECASE)
+        if m:
+            clock_time = m.group(1)
+
+        # Time into race
+        race_time = None
+        m = re.search(r"\((\d+h\s*\d+m)\)", text)
+        if m:
+            race_time = m.group(1)
+
+        # Car + class
+        car = None
+        car_class = None
+        m = re.search(r"#(\d+)-([A-Z0-9]+)", text)
+        if m:
+            car = m.group(1)
+            car_class = m.group(2)
+
+        # Pit lane time
+        pit_lane_time = None
+        m = re.search(r"Pit Lane:\s*([0-9:.]+)", text)
+        if m:
+            pit_lane_time = m.group(1)
+
+        records.append(
+            {
+                "PAGE": row["PAGE"],
+                "CLOCK_TIME": clock_time,
+                "RACE_TIME": race_time,
+                "CAR": car,
+                "CLASS": car_class,
+                "FUEL_ONLY": "Fuel only" in text,
+                "FUEL_TYRES": "Fuel, tires" in text,
+                "DRIVER_CHANGE": "DC:" in text,
+                "PIT_LANE_TIME": pit_lane_time,
+                "RAW_LINE": text,
+            }
+        )
+
+    return pd.DataFrame(records)
+
+
+# ----------------------------
+# Streamlit entry point
+# ----------------------------
+
+def show_tyre_analysis(df=None):
+    """
+    This intentionally ignores the race CSV.
+    It is a standalone PitNotes PDF parser.
+    """
+
+    st.subheader("Pit lane activity (PitNotes PDF)")
+
+    pdf_url = st.text_input(
+        "PitNotes PDF URL",
+        value="https://www.pitnotes.org/files/IMSA/2026/1/Report01.pdf",
+    )
+
+    if st.button("Parse PitNotes PDF"):
+        with st.spinner("Downloading PDF…"):
+            pdf_path = download_pdf(pdf_url)
+
+        with st.spinner("Extracting text…"):
+            lines = extract_pdf_lines(pdf_path)
+
+        with st.spinner("Parsing pit stops…"):
+            pit_df = parse_pit_lines(lines)
+
+        st.success(f"Found {len(pit_df)} pit stop entries")
+
+        st.dataframe(
+            pit_df,
+            use_container_width=True,
+            height=600,
+        )
+
+        st.download_button(
+            label="Download CSV",
+            data=pit_df.to_csv(index=False),
+            file_name="pitnotes_pitstops.csv",
+            mime="text/csv",
+        )

@@ -125,6 +125,15 @@ def show_tyre_analysis():
 
     st.dataframe(df, use_container_width=True)
 
+    # Download cached CSV
+    if os.path.exists(csv_path):
+        with open(csv_path, "rb") as f:
+            st.download_button(
+                label="Download pit stop CSV",
+                data=f,
+                file_name=f"{race_name}_pitnotes_parsed.csv",
+                mime="text/csv"
+            )
 
 if __name__ == "__main__":
     show_tyre_analysis()

@@ -1,149 +1,142 @@
-import streamlit as st
-import pandas as pd
-import pdfplumber
-import re
+"""race_tyre_analysis.py — Pit notes PDF parser for IMSA."""
+
 import os
+import re
+
+import pandas as pd
+import streamlit as st
+
+try:
+    import pdfplumber
+    _PDF_OK = True
+except ImportError:
+    _PDF_OK = False
 
 
-def extract_pitnotes_info(pdf_path: str):
+_PIT_PATTERN = re.compile(
+    r"At\s(?P<local_time>\d{1,2}:\d{2}\s(?:am|pm))\s"
+    r"\((?P<race_time>(?:\d+h\s)?\d+m)\)\s"
+    r"(?P<driver>.+?)\s"
+    r"\(#(?P<car_number>\d+)-(?P<class>\w+)[^\)]*\)\s"
+    r"(?P<pos_type>CP|OP):\s\d+,\s?pits\.?\s"
+    r"(?P<actions>"
+    r"fuel(?: only|, tires?)?"
+    r"(?:, driver change)?"
+    r"|fuel, tires"
+    r"|fuel, tires, driver change"
+    r"|fuel only"
+    r")\.?"
+    r"(?:\sDC:\s(?P<driver_change>[^\.]+))?\.?\s"
+    r"Pit Lane:\s(?P<pit_time>\d{2}:\d{2})",
+    re.IGNORECASE,
+)
+
+
+@st.cache_data(show_spinner="Parsing pit notes PDF…")
+def _parse_pitnotes(pdf_path: str) -> pd.DataFrame:
+    if not _PDF_OK:
+        return pd.DataFrame()
+
     with pdfplumber.open(pdf_path) as pdf:
-        all_text = []
+        lines = []
         for i, page in enumerate(pdf.pages):
             text = page.extract_text()
             if text:
-                all_text.extend([(line, i + 1) for line in text.split("\n")])
+                for line in text.split("\n"):
+                    if re.search(r"\bpits\b", line.lower()):
+                        lines.append((line, i + 1))
 
-    # Keep all lines that contain the word "pits"
-    pit_lines = [
-        (line, page_num)
-        for (line, page_num) in all_text
-        if re.search(r"\bpits\b", line.lower())
-    ]
-
-    # 🔴 RESTORED ROBUST REGEX (this is the key difference)
-    pattern = re.compile(
-        r"At\s(?P<local_time>\d{1,2}:\d{2}\s(?:am|pm))\s"
-        r"\((?P<race_time>(?:\d+h\s)?\d+m)\)\s"
-        r"(?P<driver>.+?)\s"
-        r"\(#(?P<car_number>\d+)-(?P<class>\w+)[^\)]*\)\s"
-        r"(?P<pos_type>CP|OP):\s\d+,\s?pits\.?\s"
-        r"(?P<actions>"
-        r"fuel(?: only|, tires?)?"
-        r"(?:, driver change)?"
-        r"|fuel, tires"
-        r"|fuel, tires, driver change"
-        r"|fuel only"
-        r")\.?"
-        r"(?:\sDC:\s(?P<driver_change>[^\.]+))?\.?\s"
-        r"Pit Lane:\s(?P<pit_time>\d{2}:\d{2})",
-        re.IGNORECASE
-    )
-
-    data = []
-
-    for line, page_num in pit_lines:
-        match = pattern.search(line)
-        if not match:
+    records = []
+    for line, page_num in lines:
+        m = _PIT_PATTERN.search(line)
+        if not m:
             continue
-
-        d = match.groupdict()
-        actions_text = d["actions"].lower()
-
-        fuel_only = "fuel only" in actions_text
-        fuel_tires = "fuel, tires" in actions_text or "fuel, tyre" in actions_text
-        driver_change = bool(d["driver_change"]) or "driver change" in actions_text
-
-        driver_out = d["driver"].strip()
-        driver_in = d["driver_change"].strip() if d["driver_change"] else driver_out
-
-        data.append({
+        d = m.groupdict()
+        actions = d["actions"].lower()
+        records.append({
             "Local Time": d["local_time"],
             "Race Time": d["race_time"],
-            "Car Number": d["car_number"],
+            "Car": d["car_number"],
             "Class": d["class"],
-            "Driver Out": driver_out,
-            "Driver In": driver_in,
-            "Position Type": d["pos_type"],
-            "Fuel only": fuel_only,
-            "Fuel, tires": fuel_tires,
-            "Driver Change": driver_change,
+            "Driver Out": d["driver"].strip(),
+            "Driver In": d["driver_change"].strip() if d["driver_change"] else d["driver"].strip(),
+            "Pos Type": d["pos_type"],
+            "Fuel only": "fuel only" in actions,
+            "Fuel + tyres": "fuel, tires" in actions or "fuel, tyre" in actions,
+            "Driver Change": bool(d["driver_change"]) or "driver change" in actions,
             "Pit Lane Time": d["pit_time"],
-            "Page": page_num
+            "Page": page_num,
         })
 
-    return pd.DataFrame(data)
+    return pd.DataFrame(records)
 
 
-def load_or_parse_pitnotes(pdf_path: str, csv_path: str):
-    if os.path.exists(csv_path):
-        return pd.read_csv(csv_path)
+def show_tyre_analysis(year: str = None, series: str = None, race: str = None):
+    """
+    Display pit notes analysis.
 
-    df = extract_pitnotes_info(pdf_path)
-    if not df.empty:
-        df.to_csv(csv_path, index=False)
-    return df
+    Parameters are passed from the sidebar so users don't have to retype them.
+    Falls back to manual text inputs if called without context.
+    """
+    st.subheader("Pit Notes Analysis")
 
-
-def show_tyre_analysis():
-    st.header("IMSA Pit Notes Analysis")
-
-    year = st.text_input("Enter race year", "2026")
-    series = st.text_input("Enter series", "IMSA")
-    race_name = st.text_input("Enter race name (filename prefix)", "Daytona")
-
-    pdf_path = os.path.join("data", year, series, f"{race_name}_pitnotes.pdf")
-    csv_path = os.path.join("data", year, series, f"{race_name}_pitnotes_parsed.csv")
-
-    if not os.path.exists(pdf_path):
-        st.error(f"PDF file not found at {pdf_path}")
+    if not _PDF_OK:
+        st.warning("pdfplumber is not installed. Run `pip install pdfplumber` to enable pit notes parsing.")
         return
 
-    if "pitnotes_df" not in st.session_state:
-        st.session_state.pitnotes_df = None
+    # Use sidebar context if provided, else let user type
+    if year and series and race:
+        from config import DATA_DIR
+        pdf_path = os.path.join(DATA_DIR, year, series, f"{race}_pitnotes.pdf")
+        csv_path = os.path.join(DATA_DIR, year, series, f"{race}_pitnotes_parsed.csv")
+    else:
+        col1, col2, col3 = st.columns(3)
+        year = col1.text_input("Year", "2026")
+        series = col2.text_input("Series", "IMSA")
+        race = col3.text_input("Race name prefix", "Daytona")
+        from config import DATA_DIR
+        pdf_path = os.path.join(DATA_DIR, year, series, f"{race}_pitnotes.pdf")
+        csv_path = os.path.join(DATA_DIR, year, series, f"{race}_pitnotes_parsed.csv")
 
-    if st.button("Parse Pit Notes PDF"):
-        with st.spinner("Parsing PDF (or loading cached CSV)..."):
-            df = load_or_parse_pitnotes(pdf_path, csv_path)
-            if df.empty:
-                st.warning("No pit notes entries found.")
-                return
+    if not os.path.exists(pdf_path):
+        st.info(f"No pit notes PDF found at `{pdf_path}`.")
+        return
 
-            st.session_state.pitnotes_df = df
-            st.success(f"Parsed data saved to CSV: {csv_path}")
+    # Load from cached CSV if it exists, else parse
+    if os.path.exists(csv_path):
+        df = pd.read_csv(csv_path)
+    else:
+        df = _parse_pitnotes(pdf_path)
+        if not df.empty:
+            df.to_csv(csv_path, index=False)
 
-    df = st.session_state.pitnotes_df
-    if df is None or df.empty:
-        st.info("Parse the pit notes PDF to begin.")
+    if df.empty:
+        st.warning("No pit stop entries found in the PDF.")
         return
 
     # Filters
     classes = sorted(df["Class"].dropna().unique())
-    selected_class = st.selectbox("Select Class", ["All"] + classes)
+    selected_class = st.selectbox("Class:", ["All"] + classes, key="pitnotes_class")
     if selected_class != "All":
         df = df[df["Class"] == selected_class]
 
-    cars = sorted(df["Car Number"].dropna().unique())
-    selected_car = st.selectbox("Select Car Number", ["All"] + cars)
+    cars = sorted(df["Car"].dropna().unique())
+    selected_car = st.selectbox("Car:", ["All"] + list(cars), key="pitnotes_car")
     if selected_car != "All":
-        df = df[df["Car Number"] == selected_car]
+        df = df[df["Car"] == selected_car]
 
     drivers = sorted(set(df["Driver Out"]).union(df["Driver In"]))
-    selected_driver = st.selectbox("Select Driver (Out or In)", ["All"] + drivers)
+    selected_driver = st.selectbox("Driver (in or out):", ["All"] + drivers, key="pitnotes_driver")
     if selected_driver != "All":
         df = df[(df["Driver Out"] == selected_driver) | (df["Driver In"] == selected_driver)]
 
     st.dataframe(df, use_container_width=True)
 
-    # Download cached CSV
     if os.path.exists(csv_path):
         with open(csv_path, "rb") as f:
             st.download_button(
-                label="Download pit stop CSV",
+                "Download pit stops CSV",
                 data=f,
-                file_name=f"{race_name}_pitnotes_parsed.csv",
-                mime="text/csv"
+                file_name=f"{race}_pitnotes_parsed.csv",
+                mime="text/csv",
             )
-
-
-if __name__ == "__main__":
-    show_tyre_analysis()

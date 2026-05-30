@@ -1,6 +1,7 @@
 import pandas as pd
 import plotly.express as px
 import streamlit as st
+from utils import lap_to_seconds
 
 def show_practice_fastest_runs(df, team_colors):
     st.subheader("Fastest Run Average Pace by Car")
@@ -44,12 +45,6 @@ def show_practice_fastest_runs(df, team_colors):
     filtered_df = filtered_df[filtered_df["NUMBER"].isin(selected_cars)]
 
     # --- Convert LAP_TIME to seconds ---
-    def lap_to_seconds(x):
-        try:
-            mins, secs = x.split(":")
-            return int(mins) * 60 + float(secs)
-        except Exception:
-            return None
 
     filtered_df["LAP_TIME_SECONDS"] = filtered_df["LAP_TIME"].apply(lap_to_seconds)
     filtered_df = filtered_df.dropna(subset=["LAP_TIME_SECONDS"])

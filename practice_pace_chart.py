@@ -1,6 +1,7 @@
 import plotly.express as px
 import pandas as pd
 import streamlit as st
+from utils import lap_to_seconds
 
 def show_practice_pace_chart(df, team_colors):
     st.subheader("Average Practice Pace by Car")
@@ -45,12 +46,6 @@ def show_practice_pace_chart(df, team_colors):
     df = df[df["NUMBER"].isin(selected_cars)]
 
     # --- Lap time conversion function ---
-    def lap_to_seconds(x):
-        try:
-            mins, secs = x.split(":")
-            return int(mins) * 60 + float(secs)
-        except Exception:
-            return None
 
     df["LAP_TIME_SECONDS"] = df["LAP_TIME"].apply(lap_to_seconds)
     df = df.dropna(subset=["LAP_TIME_SECONDS"])

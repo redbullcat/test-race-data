@@ -1,5 +1,6 @@
 import pandas as pd
 import streamlit as st
+from utils import lap_to_seconds
 import plotly.express as px
 
 def show_practice_average_long_run_pace(df, team_colors):
@@ -72,19 +73,8 @@ def show_practice_average_long_run_pace(df, team_colors):
     all_laps_df = pd.concat(lap_dfs, ignore_index=True)
 
     # Convert LAP_TIME to seconds (assuming mm:ss.sss format)
-    def lap_time_to_seconds(x):
-        try:
-            parts = x.split(":")
-            if len(parts) == 2:
-                mins, secs = parts
-                return int(mins) * 60 + float(secs)
-            elif len(parts) == 3:
-                hrs, mins, secs = parts
-                return int(hrs) * 3600 + int(mins) * 60 + float(secs)
-        except Exception:
-            return None
 
-    all_laps_df["Lap_Time_Seconds"] = all_laps_df["LAP_TIME"].apply(lap_time_to_seconds)
+    all_laps_df["Lap_Time_Seconds"] = all_laps_df["LAP_TIME"].apply(lap_to_seconds)
     all_laps_df = all_laps_df.dropna(subset=["Lap_Time_Seconds"])
 
     # Group by car (NUMBER + TEAM + MANUFACTURER) and lap_in_stint, average lap time

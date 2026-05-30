@@ -1,54 +1,47 @@
-import streamlit as st
-import os
+"""track_analysis.py — Track SVG viewer."""
+
 import base64
+import os
 
-def render_svg(svg_content):
-    b64 = base64.b64encode(svg_content.encode('utf-8')).decode('utf-8')
-    html = f'<img src="data:image/svg+xml;base64,{b64}" style="position: relative; left: 0; top: 0; width: 400px; height: auto;" />'
-    st.markdown(html, unsafe_allow_html=True)
+import streamlit as st
 
-def list_years_and_tracks(tracks_root='tracks', data_root='data'):
-    years = sorted([d for d in os.listdir(tracks_root) if os.path.isdir(os.path.join(tracks_root, d))])
-    st.write(f"Available years found in '{tracks_root}': {years}")
+from config import TRACKS_DIR
 
-    year = st.selectbox("Select Year", years)
 
-    track_dir = os.path.join(tracks_root, year)
-    svg_files = sorted([f for f in os.listdir(track_dir) if f.endswith('.svg')])
-    st.write(f"SVG files found for year {year}: {svg_files}")
+def show_track_analysis(df=None, team_colors=None):
+    """Display a track map SVG. df and team_colors are accepted but not required."""
+    st.subheader("Track Map")
 
-    # strip .svg to get track names
+    if not os.path.isdir(TRACKS_DIR):
+        st.info("No track SVG files found.")
+        return
+
+    years = sorted([d for d in os.listdir(TRACKS_DIR) if os.path.isdir(os.path.join(TRACKS_DIR, d))])
+    if not years:
+        st.info("No track data available.")
+        return
+
+    year = st.selectbox("Year:", years, key="track_year")
+    track_dir = os.path.join(TRACKS_DIR, year)
+
+    svg_files = sorted([f for f in os.listdir(track_dir) if f.lower().endswith(".svg")])
+    if not svg_files:
+        st.info(f"No SVG track maps found for {year}.")
+        return
+
     track_names = [os.path.splitext(f)[0] for f in svg_files]
-    track = st.selectbox("Select Track", track_names)
+    selected = st.selectbox("Track:", track_names, key="track_name")
 
-    return year, track
-
-def show_track_analysis():
-    st.title("Track SVG Viewer")
-
-    year, track = list_years_and_tracks()
-
-    svg_path = os.path.join('tracks', year, f'{track}.svg')
-    st.write(f"Attempting to load SVG file from: {svg_path}")
-
+    svg_path = os.path.join(track_dir, f"{selected}.svg")
     try:
-        with open(svg_path, 'r', encoding='utf-8') as f:
+        with open(svg_path, "r", encoding="utf-8") as f:
             svg_content = f.read()
-        st.write(f"Loaded SVG content preview (first 500 chars):")
-        st.code(svg_content[:500], language='xml')
-        render_svg(svg_content)
     except Exception as e:
-        st.error(f"Failed to load SVG file: {e}")
+        st.error(f"Could not load track map: {e}")
+        return
 
-    data_path = os.path.join('data', year, f'{track}.csv')
-    if os.path.exists(data_path):
-        st.write(f"Data CSV found for {track} in {year}: {data_path}")
-        # Optional: load CSV here if needed
-    else:
-        st.write(f"No data CSV found for {track} in {year}")
-
-def main():
-    show_track_analysis()
-
-if __name__ == '__main__':
-    main()
+    b64 = base64.b64encode(svg_content.encode("utf-8")).decode("utf-8")
+    st.markdown(
+        f'<img src="data:image/svg+xml;base64,{b64}" style="width:100%; max-width:600px; height:auto;" />',
+        unsafe_allow_html=True,
+    )

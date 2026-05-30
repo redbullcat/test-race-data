@@ -20,9 +20,9 @@ def _build_results(df: pd.DataFrame, selected_class: str) -> pd.DataFrame:
     )
 
     # Final classification: most laps, then earliest elapsed time
+    idx = class_df.groupby("NUMBER")["LAP_NUMBER"].idxmax()
     last_laps = (
-        class_df.groupby("NUMBER")
-        .apply(lambda x: x.loc[x["LAP_NUMBER"].idxmax()])
+        class_df.loc[idx]
         .reset_index(drop=True)
         .sort_values(["LAP_NUMBER", "ELAPSED_SECONDS"], ascending=[False, True])
         .reset_index(drop=True)

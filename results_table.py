@@ -107,4 +107,4 @@ def show_results_table(df, team_colors):
     display_df.insert(0, "Pos", range(1, len(display_df) + 1))
     display_df = display_df.set_index("Pos")
 
-    st.dataframe(display_df, use_container_width=True)
+    st.dataframe(display_df, width='stretch')

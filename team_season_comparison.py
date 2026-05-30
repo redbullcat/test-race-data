@@ -106,7 +106,7 @@ def show_team_season_comparison(df, team_colors, year: str, series: str):
                 title=f"{selected_team} — {race_name}",
             )
             apply_dark_layout(fig)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
 
     # Season summary
     if not summary_records:
@@ -151,4 +151,4 @@ def show_team_season_comparison(df, team_colors, year: str, series: str):
             legend_title="Pace %",
         )
         apply_dark_layout(fig)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')

@@ -88,7 +88,7 @@ def show_gap_evolution_chart(filtered_df, team_colors, selected_class, selected_
         yaxis_title="Gap to Leader (s)",
     )
     apply_dark_layout(fig)
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
 
 
 def show_cumulative_time_chart(filtered_df, team_colors, selected_class, selected_cars):
@@ -121,4 +121,4 @@ def show_cumulative_time_chart(filtered_df, team_colors, selected_class, selecte
         yaxis_title="Cumulative Time (s)",
     )
     apply_dark_layout(fig)
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')

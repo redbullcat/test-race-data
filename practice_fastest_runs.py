@@ -176,7 +176,7 @@ def show_practice_fastest_runs(df, team_colors):
         showlegend=True,
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
 
     # --- Prepare and show detailed tables per class ---
     def format_lap_time(seconds):
@@ -205,4 +205,4 @@ def show_practice_fastest_runs(df, team_colors):
         class_df = fastest_runs_df[fastest_runs_df["Class"] == cls][display_cols].rename(
             columns={"Stint_Length": "Stint Length (laps)"}
         )
-        st.dataframe(class_df, use_container_width=True)
+        st.dataframe(class_df, width='stretch')

@@ -130,7 +130,7 @@ def show_tyre_analysis(year: str = None, series: str = None, race: str = None):
     if selected_driver != "All":
         df = df[(df["Driver Out"] == selected_driver) | (df["Driver In"] == selected_driver)]
 
-    st.dataframe(df, use_container_width=True)
+    st.dataframe(df, width='stretch')
 
     if os.path.exists(csv_path):
         with open(csv_path, "rb") as f:

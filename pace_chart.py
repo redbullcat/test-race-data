@@ -21,8 +21,12 @@ def show_pace_chart(df, team_colors):
         "Select car(s):", available_cars, default=available_cars, key="pace_cars"
     )
 
-    min_lap = int(df["LAP_NUMBER"].min())
-    max_lap = int(df["LAP_NUMBER"].max())
+    valid_laps = df["LAP_NUMBER"].dropna()
+    if valid_laps.empty:
+        st.warning("No lap number data available for this session.")
+        return
+    min_lap = int(valid_laps.min())
+    max_lap = int(valid_laps.max())
     lap_range = st.slider(
         "Lap range:", min_lap, max_lap, (min_lap, max_lap), key="pace_laps"
     )
@@ -74,4 +78,4 @@ def show_pace_chart(df, team_colors):
     fig.update_xaxes(range=[avg_df["LAP_TIME_SECONDS"].min() - x_pad,
                              avg_df["LAP_TIME_SECONDS"].max() + x_pad])
     apply_dark_layout(fig, title_font=dict(size=22))
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')

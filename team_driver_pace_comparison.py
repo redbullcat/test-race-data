@@ -52,5 +52,5 @@ def show_team_driver_pace_comparison(df, team_colors):
                     title_font=dict(size=20),
                 )
                 apply_dark_layout(fig)
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width='stretch')
                 st.divider()

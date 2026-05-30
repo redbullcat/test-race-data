@@ -84,7 +84,7 @@ def show_practice_long_runs(longest_stints_df, team_colors):
         title_font=dict(size=20),
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
 
     # --- Debug: Show raw data table below the chart ---
     st.markdown("#### Raw Data for Longest Stints")
@@ -109,4 +109,4 @@ def show_practice_long_runs(longest_stints_df, team_colors):
         })
 
     debug_df = pd.DataFrame(table_data)
-    st.dataframe(debug_df, use_container_width=True)
+    st.dataframe(debug_df, width='stretch')

@@ -61,4 +61,4 @@ def show_driver_pace_chart(df, team_colors):
     fig.update_xaxes(range=[avg_df["LAP_TIME_SECONDS"].min() - x_pad,
                              avg_df["LAP_TIME_SECONDS"].max() + x_pad])
     apply_dark_layout(fig, title_font=dict(size=22))
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')

@@ -91,4 +91,4 @@ def show_stint_pace_chart(df, team_colors):
             y_max = stint_df["Stint Avg (Top 20%)"].max() + 0.5
             fig.update_layout(yaxis=dict(range=[y_min, y_max]), xaxis=dict(dtick=1))
             apply_dark_layout(fig, title_font=dict(size=22))
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')

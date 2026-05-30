@@ -129,7 +129,7 @@ def show_race_stats(df, race_start_date):
                 car_stats.rename(columns={"NUMBER": "Car", "laps_led": "Laps Led", "laps_range": "Lap Ranges", "% led": "% of Race"})[
                     ["Car", "Laps Led", "Lap Ranges", "% of Race"]
                 ],
-                use_container_width=True,
+                width='stretch',
                 hide_index=True,
             )
 
@@ -146,6 +146,6 @@ def show_race_stats(df, race_start_date):
                 driver_stats.rename(columns={"NUMBER": "Car", "DRIVER_NAME": "Driver", "laps_led": "Laps Led", "laps_range": "Lap Ranges", "% led": "% of Race"})[
                     ["Car", "Driver", "Laps Led", "Lap Ranges", "% of Race"]
                 ],
-                use_container_width=True,
+                width='stretch',
                 hide_index=True,
             )

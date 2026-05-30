@@ -158,7 +158,7 @@ def show_practice_average_long_run_pace(df, team_colors):
         legend_title_text="Car - Team"
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
 
     # Summary table with overall average lap time per car (filtered laps only)
     summary = (

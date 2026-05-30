@@ -101,4 +101,4 @@ def show_lap_position_chart(df, team_colors):
                 hovermode="x unified",
             )
             apply_dark_layout(fig)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')

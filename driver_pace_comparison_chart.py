@@ -84,4 +84,4 @@ def show_driver_pace_comparison(df, team_colors):
         legend_title="Percentile Range",
     )
     apply_dark_layout(fig)
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')

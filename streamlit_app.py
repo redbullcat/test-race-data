@@ -196,4 +196,4 @@ if df is not None:
             .sort_values(["CLASS", "TEAM", "NUMBER"])
             .reset_index(drop=True)
         )
-        st.dataframe(debug_df, use_container_width=True, hide_index=True)
+        st.dataframe(debug_df, width='stretch', hide_index=True)

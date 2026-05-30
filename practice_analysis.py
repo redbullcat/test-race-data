@@ -15,10 +15,6 @@ from practice_fastest_runs import show_practice_fastest_runs
 from practice_team_run_analysis import show_practice_team_run_analysis
 from practice_average_long_run_pace import show_practice_average_long_run_pace
 
-_PRACTICE_RE = re.compile(r"_practice(\d+)\.csv$", re.IGNORECASE)
-_SESSION_RE = re.compile(r"_session(\d+)\.csv$", re.IGNORECASE)
-
-
 def _parse_elapsed_secs(val) -> float | None:
     return lap_to_seconds(val)
 
@@ -159,7 +155,7 @@ def show_practice_analysis(
     # Overview metrics
     st.markdown("### Session Overview")
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Sessions", len(selected_sessions))
+    c1.metric("Sessions", len(selected_files))
     c2.metric("Total laps", len(df))
     c3.metric("Cars", df[["NUMBER", "TEAM"]].drop_duplicates().shape[0])
     c4.metric("Drivers", df["DRIVER_NAME"].nunique())

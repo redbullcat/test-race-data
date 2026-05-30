@@ -3,8 +3,10 @@ config.py — static configuration: team colours, series names, data directory.
 Edit this file when teams change or new series are added.
 """
 
-DATA_DIR = "data"
-TRACKS_DIR = "tracks"
+import os
+_HERE = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(_HERE, "data")
+TRACKS_DIR = os.path.join(_HERE, "tracks")
 
 # ---------------------------------------------------------------------------
 # Team colours

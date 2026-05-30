@@ -22,6 +22,14 @@ st.set_page_config(
 # ---------------------------------------------------------------------------
 race_files = load_file_index(DATA_DIR)
 
+import os
+st.write("Working directory:", os.getcwd())
+st.write("DATA_DIR:", DATA_DIR)
+st.write("DATA_DIR exists:", os.path.exists(DATA_DIR))
+if os.path.exists(DATA_DIR):
+    st.write("Contents:", os.listdir(DATA_DIR))
+st.write("race_files:", race_files)
+
 # ---------------------------------------------------------------------------
 # Sidebar
 # ---------------------------------------------------------------------------

@@ -1,10 +1,10 @@
 """
 streamlit_app.py — On The Apex race data analyser.
 
-Entry point. Handles sidebar navigation and passes context to page modules.
-Chart logic lives in pages/; shared utilities in utils.py and data_loader.py.
+Directory structure: data/{SERIES}/{year}/{race}/{session_type}/{file}.csv
 """
 
+import os
 import streamlit as st
 
 from config import DATA_DIR, TEAM_COLORS, SERIES_DISPLAY
@@ -18,55 +18,15 @@ st.set_page_config(
 )
 
 # ---------------------------------------------------------------------------
-# File index (cached — only rebuilt when the data directory changes)
+# File index
 # ---------------------------------------------------------------------------
 race_files = load_file_index(DATA_DIR)
-
-import os
-st.write("Working directory:", os.getcwd())
-st.write("DATA_DIR:", DATA_DIR)
-st.write("DATA_DIR exists:", os.path.exists(DATA_DIR))
-if os.path.exists(DATA_DIR):
-    st.write("Contents:", os.listdir(DATA_DIR))
-st.write("race_files:", race_files)
 
 # ---------------------------------------------------------------------------
 # Sidebar
 # ---------------------------------------------------------------------------
 with st.sidebar:
     st.header("On The Apex")
-
-    # Series selector — show display names, map back to folder names
-    folder_to_display = SERIES_DISPLAY
-    display_to_folder = {v: k for k, v in folder_to_display.items()}
-    all_display_names = list(folder_to_display.values())
-
-    selected_series_display = st.selectbox("Series", all_display_names)
-    selected_series = display_to_folder.get(selected_series_display, selected_series_display)
-
-    selected_year = st.selectbox("Year", sorted(race_files.keys(), reverse=True))
-
-    available_series = race_files.get(selected_year, {})
-    if selected_series not in available_series:
-        st.error(f"No {selected_series_display} data available for {selected_year}.")
-        st.stop()
-
-    events = available_series[selected_series]
-    event_keys = sorted(events.keys())
-
-    def _event_label(key):
-        event = events[key]
-        if event["race_file"] is None and event["sessions"]:
-            return f"{key.replace('_', ' ').title()} (Practice)"
-        return key.replace("_", " ").title()
-
-    selected_event_idx = st.selectbox(
-        "Event",
-        range(len(event_keys)),
-        format_func=lambda i: _event_label(event_keys[i]),
-    )
-    selected_event_key = event_keys[selected_event_idx]
-    selected_event = events[selected_event_key]
 
     page = st.selectbox(
         "Page",
@@ -76,40 +36,124 @@ with st.sidebar:
             "Team season comparison",
             "Track analysis",
             "Practice / Test analysis",
+            "Qualifying analysis",
+            "⬇ Download CSVs",
         ],
     )
 
+    if page == "⬇ Download CSVs":
+        pass  # no data selectors needed
+    else:
+        # Series
+        folder_to_display = SERIES_DISPLAY
+        display_to_folder = {v: k for k, v in folder_to_display.items()}
+
+        available_series_folders = sorted(race_files.keys())
+        # Show display names where we have one, else the folder name itself
+        series_options = [
+            folder_to_display.get(s, s) for s in available_series_folders
+        ]
+        selected_series_display = st.selectbox("Series", series_options)
+        selected_series = display_to_folder.get(
+            selected_series_display, selected_series_display
+        )
+
+        # Year
+        years_for_series = sorted(
+            race_files.get(selected_series, {}).keys(), reverse=True
+        )
+        if not years_for_series:
+            st.error(f"No data found for {selected_series_display}.")
+            st.stop()
+        selected_year = st.selectbox("Year", years_for_series)
+
+        # Race
+        races_for_year = sorted(
+            race_files.get(selected_series, {}).get(selected_year, {}).keys()
+        )
+        if not races_for_year:
+            st.error(f"No races found for {selected_series_display} {selected_year}.")
+            st.stop()
+        selected_race = st.selectbox(
+            "Race",
+            races_for_year,
+            format_func=lambda r: r.replace("-", " ").title(),
+        )
+
+        # Session type (what's available for this race)
+        sessions_available = race_files[selected_series][selected_year][selected_race]
+        session_type_options = list(sessions_available.keys())
+
+        # Default to race if available, otherwise first available
+        default_idx = (
+            session_type_options.index("race")
+            if "race" in session_type_options
+            else 0
+        )
+        selected_session_type = st.selectbox(
+            "Session type",
+            session_type_options,
+            index=default_idx,
+            format_func=str.title,
+        )
+
 # ---------------------------------------------------------------------------
-# Load race data (skipped for practice-only page)
+# Download page — render immediately, no race data needed
 # ---------------------------------------------------------------------------
+if page == "⬇ Download CSVs":
+    st.title("⬇ Download Al-Kamel CSVs")
+    from pages.downloader import show_downloader
+    show_downloader()
+    st.stop()
+
+# ---------------------------------------------------------------------------
+# Load data for the selected session
+# ---------------------------------------------------------------------------
+session_dir = os.path.join(
+    DATA_DIR, selected_series, selected_year, selected_race, selected_session_type
+)
+session_files = sessions_available[selected_session_type]
+
 df = None
-df_pre = None
 race_start_date = None
 
-if page != "Practice / Test analysis":
-    if selected_event["race_file"] is None:
-        st.error(f"No main race CSV found for {selected_event_key}.")
+if selected_session_type == "race":
+    if not session_files:
+        st.error("No race CSV found in this folder.")
         st.stop()
-
-    file_path = f"{DATA_DIR}/{selected_year}/{selected_series}/{selected_event['race_file']}"
+    file_path = os.path.join(session_dir, session_files[0])
     df = load_race(file_path, selected_year, selected_series)
-    race_start_date = parse_race_start_date(selected_event["race_file"])
+    race_start_date = parse_race_start_date(session_files[0])
+
+elif selected_session_type in ("practice", "qualifying"):
+    # Loaded on-demand by the practice/qualifying page
+    pass
 
 # ---------------------------------------------------------------------------
 # Page header
 # ---------------------------------------------------------------------------
-st.title(f"🏁 {selected_year} {selected_series_display} — {selected_event_key.replace('_', ' ').title()}")
+race_display = selected_race.replace("-", " ").title()
+st.title(
+    f"🏁 {selected_year} {selected_series_display} — "
+    f"{race_display} / {selected_session_type.title()}"
+)
 
 # ---------------------------------------------------------------------------
 # Route to pages
 # ---------------------------------------------------------------------------
 if page == "Overview":
-    from pages.overview import show_overview
-    show_overview(df, race_start_date, TEAM_COLORS)
+    if selected_session_type != "race":
+        st.info("Overview is available for race sessions. Please select 'race' as the session type.")
+    else:
+        from pages.overview import show_overview
+        show_overview(df, race_start_date, TEAM_COLORS)
 
 elif page == "Team by team":
-    from pages.team_by_team import show_team_by_team
-    show_team_by_team(df, TEAM_COLORS)
+    if selected_session_type != "race":
+        st.info("Team by team is available for race sessions.")
+    else:
+        from pages.team_by_team import show_team_by_team
+        show_team_by_team(df, TEAM_COLORS)
 
 elif page == "Team season comparison":
     from pages.season_comparison import show_season_comparison
@@ -120,11 +164,29 @@ elif page == "Track analysis":
     show_track(df, TEAM_COLORS)
 
 elif page == "Practice / Test analysis":
-    from pages.practice import show_practice
-    show_practice(DATA_DIR, selected_year, selected_series, selected_event_key, TEAM_COLORS)
+    if selected_session_type != "practice":
+        st.info("Switch session type to 'practice' to use this page.")
+    else:
+        from pages.practice import show_practice
+        show_practice(
+            session_dir=session_dir,
+            session_files=session_files,
+            team_colors=TEAM_COLORS,
+        )
+
+elif page == "Qualifying analysis":
+    if selected_session_type != "qualifying":
+        st.info("Switch session type to 'qualifying' to use this page.")
+    else:
+        from pages.qualifying import show_qualifying
+        show_qualifying(
+            session_dir=session_dir,
+            session_files=session_files,
+            team_colors=TEAM_COLORS,
+        )
 
 # ---------------------------------------------------------------------------
-# Debug expander (only when race data loaded)
+# Debug expander
 # ---------------------------------------------------------------------------
 if df is not None:
     with st.expander("Debug: Car IDs", expanded=False):

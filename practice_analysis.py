@@ -1,13 +1,10 @@
 """practice_analysis.py — Practice / test session analysis page."""
 
-import math
 import os
-import re
 
 import pandas as pd
 import streamlit as st
 
-from config import DATA_DIR
 from data_loader import load_practice_sessions
 from utils import lap_to_seconds
 
@@ -27,12 +24,10 @@ def _parse_elapsed_secs(val) -> float | None:
 
 
 @st.cache_data(show_spinner=False)
-def _session_durations(session_files_tuple: tuple) -> dict[int, float]:
-    """Compute the duration in minutes for each session."""
-    session_files = dict(session_files_tuple)
+def _session_durations_by_name(files_tuple: tuple) -> dict[str, float]:
+    """Compute session duration in minutes, keyed by filename."""
     durations = {}
-
-    for num, path in session_files.items():
+    for filename, path in files_tuple:
         try:
             df = pd.read_csv(path, delimiter=";")
         except Exception:
@@ -40,14 +35,10 @@ def _session_durations(session_files_tuple: tuple) -> dict[int, float]:
         df.columns = df.columns.str.strip()
         if "ELAPSED" not in df.columns:
             continue
-
         df["ELAPSED_S"] = df["ELAPSED"].apply(_parse_elapsed_secs)
         df = df.dropna(subset=["ELAPSED_S"])
-        if df.empty:
-            continue
-
-        durations[num] = round(df["ELAPSED_S"].max() / 60, 1)
-
+        if not df.empty:
+            durations[filename] = round(df["ELAPSED_S"].max() / 60, 1)
     return durations
 
 
@@ -110,62 +101,50 @@ def _longest_stints(df: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def show_practice_analysis(data_dir: str, year: str, series: str, race: str, team_colors: dict):
+def show_practice_analysis(
+    session_dir: str,
+    session_files: list[str],
+    team_colors: dict,
+):
+    """
+    New signature: session_dir is the full path to the practice/ folder,
+    session_files is the list of CSV filenames inside it.
+    """
     st.subheader("Practice / Test Session Analysis")
 
-    base_path = os.path.join(data_dir, year, series)
-    if not os.path.isdir(base_path):
-        st.error("Data directory not found.")
+    if not session_files:
+        st.warning("No session files found.")
         return
 
-    # Discover files
-    practice_files: dict[int, str] = {}
-    session_files: dict[int, str] = {}
-    race_lower = race.lower()
+    # Build {filename: full_path} map for duration calculation
+    files_map = {f: os.path.join(session_dir, f) for f in session_files}
 
-    for filename in os.listdir(base_path):
-        fl = filename.lower()
-        if not fl.startswith(race_lower):
-            continue
-        m_p = _PRACTICE_RE.search(fl)
-        if m_p:
-            practice_files[int(m_p.group(1))] = os.path.join(base_path, filename)
-            continue
-        m_s = _SESSION_RE.search(fl)
-        if m_s:
-            session_files[int(m_s.group(1))] = os.path.join(base_path, filename)
-
-    files_to_use = practice_files or session_files
-    if not files_to_use:
-        st.warning("No practice / test session files found for this event.")
-        return
-
-    available_sessions = sorted(files_to_use.keys())
-    # Compute durations once (cached)
-    durations = _session_durations(tuple(files_to_use.items()))
+    # Compute session durations (cached) — keyed by filename
+    durations = _session_durations_by_name(tuple(files_map.items()))
 
     # Session selector
     st.markdown("### Session Selection")
     all_selected = st.checkbox("All sessions", value=True, key="prac_all_sessions")
 
-    selected_sessions: list[int] = []
-    for num in available_sessions:
-        dur_str = f" ({durations[num]} min)" if num in durations else ""
+    selected_files: list[str] = []
+    for filename in session_files:
+        dur_str = f" ({durations[filename]} min)" if filename in durations else ""
+        label = os.path.splitext(filename)[0].replace("_", " ").title()
         checked = st.checkbox(
-            f"Session {num}{dur_str}",
+            f"{label}{dur_str}",
             value=all_selected,
             disabled=all_selected,
-            key=f"prac_session_{num}",
+            key=f"prac_session_{filename}",
         )
         if all_selected or checked:
-            selected_sessions.append(num)
+            selected_files.append(filename)
 
-    if not selected_sessions:
+    if not selected_files:
         st.warning("No sessions selected.")
         return
 
     # Load and cache combined practice DataFrame
-    df = load_practice_sessions(files_to_use, tuple(selected_sessions))
+    df = load_practice_sessions(session_dir, tuple(selected_files))
 
     if df.empty:
         st.error("Failed to load session data.")
@@ -201,7 +180,6 @@ def show_practice_analysis(data_dir: str, year: str, series: str, race: str, tea
         show_practice_fastest_runs(df, team_colors)
 
     with st.expander("Team Run Analysis", expanded=True):
-        # Pass session durations via a local variable (practice_team_run_analysis reads it)
         st.session_state["session_durations"] = durations
         show_practice_team_run_analysis(df, team_colors)
 

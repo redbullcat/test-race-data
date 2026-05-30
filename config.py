@@ -4,14 +4,30 @@ Edit this file when teams change or new series are added.
 """
 
 import os
+
 _HERE = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(_HERE, "data")
 TRACKS_DIR = os.path.join(_HERE, "tracks")
 
 # ---------------------------------------------------------------------------
+# Series — maps sidebar display name → folder name inside data/
+# ---------------------------------------------------------------------------
+SERIES_DISPLAY: dict[str, str] = {
+    "WEC":  "FIA WEC",
+    "IMSA": "IMSA",
+    "ELMS": "ELMS",
+}
+
+# ---------------------------------------------------------------------------
+# Session types — folder names inside data/[series]/[year]/[race]/
+# The order here controls the order they appear in the sidebar.
+# ---------------------------------------------------------------------------
+SESSION_TYPES = ["race", "practice", "qualifying"]
+
+# ---------------------------------------------------------------------------
 # Team colours
-# Keys are matched case-insensitively against the TEAM column using substring
-# matching (see utils.get_team_color).  More specific keys should come first.
+# Keys are matched case-insensitively against the TEAM column.
+# More specific keys should come first.
 # ---------------------------------------------------------------------------
 TEAM_COLORS: dict[str, str] = {
     # WEC Hypercar
@@ -40,11 +56,4 @@ TEAM_COLORS: dict[str, str] = {
     "JDC-Miller MotorSports": "#F8D94A",
     "Acura Meyer Shank Racing w/Curb Agajanian": "#E6662C",
     "Cadillac Whelen": "#D53C35",
-}
-
-# Series display names (maps internal folder names → sidebar labels)
-SERIES_DISPLAY: dict[str, str] = {
-    "WEC": "FIA WEC",
-    "IMSA": "IMSA",
-    "ELMS": "ELMS",
 }

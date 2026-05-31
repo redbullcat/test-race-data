@@ -110,7 +110,7 @@ def load_race(file_path: str, year: str, series: str) -> pd.DataFrame:
     Load and fully preprocess a race CSV.
     Adds: YEAR, SERIES, CAR_ID, LAP_TIME_SECONDS, LAP_NUMBER (numeric), ELAPSED_SECONDS.
     """
-    df = pd.read_csv(file_path, delimiter=";")
+    df = pd.read_csv(file_path, delimiter=";", dtype=str)
     df.columns = df.columns.str.strip()
 
     if "\ufeffNUMBER" in df.columns:
@@ -158,7 +158,7 @@ def load_practice_sessions(
         path = os.path.join(session_dir, filename)
         if not os.path.exists(path):
             continue
-        df = pd.read_csv(path, delimiter=";")
+        df = pd.read_csv(path, delimiter=";", dtype=str)
         df.columns = df.columns.str.strip()
 
         if "\ufeffNUMBER" in df.columns:

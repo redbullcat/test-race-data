@@ -18,7 +18,7 @@ def show_practice_fastest_runs(df, team_colors, key_prefix="prac"):
     filtered_df = df[df["CLASS"].isin(selected_classes)]
 
     # --- Cars filter ---
-    available_cars = sorted(filtered_df["NUMBER"].unique().tolist())
+    available_cars = sort_cars(filtered_df["NUMBER"].unique())
     selected_cars = st.multiselect(
         "Select Car(s):",
         options=available_cars,

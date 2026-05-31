@@ -18,6 +18,29 @@ import streamlit as st
 
 
 # ---------------------------------------------------------------------------
+# Car number sorting
+# ---------------------------------------------------------------------------
+
+def sort_cars(car_numbers) -> list:
+    """
+    Sort car number strings numerically (by integer value) while preserving
+    leading zeros in the display strings.
+
+    e.g. ["007", "7", "51", "023", "2", "10"] → ["2", "007", "7", "10", "023", "23", "51"]
+    i.e. sorted by int value, with "007" and "7" adjacent (both = 7).
+
+    Falls back to lexicographic sort for non-numeric entries (e.g. "LMP2").
+    """
+    def _key(s: str):
+        try:
+            return (0, int(s), s)   # numeric: sort by value, then by string for tie-break
+        except (ValueError, TypeError):
+            return (1, 0, str(s))   # non-numeric: after all numeric entries
+
+    return sorted(car_numbers, key=_key)
+
+
+# ---------------------------------------------------------------------------
 # Lap time parsing
 # ---------------------------------------------------------------------------
 

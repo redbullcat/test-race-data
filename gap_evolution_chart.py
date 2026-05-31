@@ -23,7 +23,7 @@ def get_filtered_race_data(df, race_start_date):
     selected_class = st.selectbox("Select class:", sorted(df["CLASS"].dropna().unique()), key="gap_class")
     class_df = df[df["CLASS"] == selected_class].copy()
 
-    car_numbers = sorted(class_df["NUMBER"].dropna().unique())
+    car_numbers = sort_cars(class_df["NUMBER"].dropna().unique())
     default_cars = car_numbers[:3] if len(car_numbers) >= 3 else car_numbers
     selected_cars = st.multiselect(
         "Select cars to compare:", car_numbers, default=default_cars, key="gap_cars"

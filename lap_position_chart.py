@@ -22,7 +22,7 @@ def show_lap_position_chart(df, team_colors):
     for tab, cls in zip(tabs, selected_classes):
         with tab:
             class_df = df[df["CLASS"] == cls]
-            available_cars = sorted(class_df["NUMBER"].unique())
+            available_cars = sort_cars(class_df["NUMBER"].unique())
             selected_cars = st.multiselect(
                 f"Cars in {cls}:", available_cars, default=available_cars, key=f"pos_cars_{cls}"
             )

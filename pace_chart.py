@@ -16,7 +16,7 @@ def show_pace_chart(df, team_colors):
 
     df = df[df["CLASS"].isin(selected_classes)]
 
-    available_cars = sorted(df["NUMBER"].unique())
+    available_cars = sort_cars(df["NUMBER"].unique())
     selected_cars = st.multiselect(
         "Select car(s):", available_cars, default=available_cars, key="pace_cars"
     )

@@ -43,7 +43,7 @@ def _compute_stints(df, team_colors_tuple, cls):
             })
 
     import pandas as pd
-    return pd.DataFrame(stint_data).sort_values(["Stint Number", "NUMBER"])
+    return pd.DataFrame(stint_data).assign(_num_sort=lambda d: pd.to_numeric(d["NUMBER"], errors="coerce")).sort_values(["Stint Number", "_num_sort"]).drop(columns=["_num_sort"])
 
 
 def show_stint_pace_chart(df, team_colors):
@@ -57,7 +57,7 @@ def show_stint_pace_chart(df, team_colors):
     for cls, tab in zip(classes, tabs):
         with tab:
             class_df = df[df["CLASS"] == cls]
-            available_cars = sorted(class_df["NUMBER"].unique())
+            available_cars = sort_cars(class_df["NUMBER"].unique())
             selected_cars = st.multiselect(
                 f"Select cars — {cls}:", available_cars, key=f"stint_cars_{cls}"
             )

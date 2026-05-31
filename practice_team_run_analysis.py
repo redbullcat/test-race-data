@@ -40,7 +40,7 @@ def show_practice_team_run_analysis(df, team_colors, key_prefix="prac"):
 
     team_df = class_df[class_df["TEAM"] == selected_team]
 
-    cars = sorted(team_df["NUMBER"].dropna().unique().tolist())
+    cars = sort_cars(team_df["NUMBER"].dropna().unique())
     selected_car = st.selectbox(
         "Select Car:",
         options=cars,

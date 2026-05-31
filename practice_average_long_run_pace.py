@@ -15,7 +15,7 @@ def show_practice_average_long_run_pace(df, team_colors, key_prefix="prac"):
         df_filtered = df_filtered[df_filtered["CLASS"] == selected_class]
 
     # Filter cars available after class filter
-    cars = sorted(df_filtered["NUMBER"].dropna().unique())
+    cars = sort_cars(df_filtered["NUMBER"].dropna().unique())
     selected_car = st.selectbox("Select Car:", ["All"] + cars, index=0, key=f"{key_prefix}_avg_car")
 
     if selected_car != "All":

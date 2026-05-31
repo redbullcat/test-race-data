@@ -34,7 +34,7 @@ def load_file_index(data_dir: str = DATA_DIR) -> dict:
         { series: { year: { race: { session_type: [filename, …] } } } }
 
     Only directories that actually contain CSV files appear in the index.
-    session_type is one of 'race', 'practice', 'qualifying' (from SESSION_TYPES).
+    session_type is one of 'race', 'practice', 'qualifying', 'test' (from SESSION_TYPES).
     """
     index: dict = {}
 

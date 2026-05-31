@@ -190,22 +190,20 @@ function classify(sessionName, subSession) {{
 }}
 
 // ── Generate a clean filename ─────────────────────────────────────────────────
-function makeFilename(sessionName, subSession, type) {{
+function makeFilename(sessionName, subSession, type, dateStr) {{
   const sn = sessionName.toLowerCase();
   const sub = (subSession || '').toLowerCase();
+  const dateSuffix = (dateStr && type === 'race') ? `_${{dateStr}}` : '';
 
   if (type === 'race') {{
-    // For races, we want just "race.csv" for the final hour
-    // For hour files, include the hour: race_hour6.csv
     if (sub.match(/hour/)) {{
       const m = sub.match(/hour\\s*(\\d+)/);
-      return m ? `race_hour${{m[1]}}.csv` : 'race.csv';
+      return m ? `race_hour${{m[1]}}${{dateSuffix}}.csv` : `race${{dateSuffix}}.csv`;
     }}
-    return 'race.csv';
+    return `race${{dateSuffix}}.csv`;
   }}
 
   if (type === 'qualifying') {{
-    // qualifying_hypercar.csv, qualifying_lmgt3.csv, hyperpole_hypercar.csv
     const base = sn
       .replace('qualifying', 'qualifying')
       .replace('hyperpole', 'hyperpole')
@@ -215,11 +213,8 @@ function makeFilename(sessionName, subSession, type) {{
   }}
 
   if (type === 'practice') {{
-    // Free Practice 1 → practice1.csv, Free Practice 2 → practice2.csv
-    // Bronze Driver Collective Test → test_bronze.csv
     const m = sn.match(/(\\d+)/);
     if (m) return `practice${{m[1]}}.csv`;
-    // Named sessions
     const clean = sn
       .replace(/free\\s*/g, '')
       .replace(/practice\\s*/g, 'practice_')
@@ -228,7 +223,6 @@ function makeFilename(sessionName, subSession, type) {{
     return clean.replace(/_+/g, '_').replace(/^_|_$/g, '') + '.csv';
   }}
 
-  // other
   return slugify(sn).replace(/-/g, '_') + '.csv';
 }}
 
@@ -313,8 +307,12 @@ btnScan.addEventListener('click', async () => {{
     const subSession  = (maybeSubSes && !maybeSubSes.toUpperCase().endsWith('.CSV'))
                         ? stripPrefix(maybeSubSes) : '';
 
+    // Extract YYYYMMDD from the session folder timestamp prefix
+    const dateStr = (sessionPart.length >= 8 && /^\\d{{8}}/.test(sessionPart))
+                    ? sessionPart.slice(0, 8) : '';
+
     const type     = classify(sessionName, subSession);
-    const newName  = makeFilename(sessionName, subSession, type);
+    const newName  = makeFilename(sessionName, subSession, type, dateStr);
     const path     = makePath(year, round, type, newName);
     const label    = sessionName + (subSession ? ' / ' + subSession : '');
 

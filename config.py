@@ -22,7 +22,7 @@ SERIES_DISPLAY: dict[str, str] = {
 # Session types — folder names inside data/[series]/[year]/[race]/
 # The order here controls the order they appear in the sidebar.
 # ---------------------------------------------------------------------------
-SESSION_TYPES = ["race", "practice", "qualifying"]
+SESSION_TYPES = ["race", "practice", "test", "qualifying"]
 
 # ---------------------------------------------------------------------------
 # Team colours

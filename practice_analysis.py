@@ -101,10 +101,13 @@ def show_practice_analysis(
     session_dir: str,
     session_files: list[str],
     team_colors: dict,
+    key_prefix: str = "prac",
 ):
     """
     New signature: session_dir is the full path to the practice/ folder,
     session_files is the list of CSV filenames inside it.
+    key_prefix disambiguates widget keys when called from multiple tabs
+    (e.g. "prac" for practice, "qual" for qualifying, "test" for test sessions).
     """
     st.subheader("Practice / Test Session Analysis")
 
@@ -120,7 +123,7 @@ def show_practice_analysis(
 
     # Session selector
     st.markdown("### Session Selection")
-    all_selected = st.checkbox("All sessions", value=True, key="prac_all_sessions")
+    all_selected = st.checkbox("All sessions", value=True, key=f"{key_prefix}_all_sessions")
 
     selected_files: list[str] = []
     for filename in session_files:
@@ -130,7 +133,7 @@ def show_practice_analysis(
             f"{label}{dur_str}",
             value=all_selected,
             disabled=all_selected,
-            key=f"prac_session_{filename}",
+            key=f"{key_prefix}_session_{filename}",
         )
         if all_selected or checked:
             selected_files.append(filename)

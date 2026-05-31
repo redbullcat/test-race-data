@@ -151,8 +151,13 @@ if section == "🔧 Tests":
     session_dir = os.path.join(DATA_DIR, selected_series, selected_year, selected_test, session_type)
     session_files = available_test_sessions[session_type]
 
-    from pages.practice import show_practice
-    show_practice(session_dir=session_dir, session_files=session_files, team_colors=TEAM_COLORS)
+    from practice_analysis import show_practice_analysis
+    show_practice_analysis(
+        session_dir=session_dir,
+        session_files=session_files,
+        team_colors=TEAM_COLORS,
+        key_prefix="test",
+    )
     st.stop()
 
 # ---------------------------------------------------------------------------

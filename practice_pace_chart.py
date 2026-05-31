@@ -58,9 +58,15 @@ def show_practice_pace_chart(df, team_colors):
             n_laps = len(group_sorted)
             n_keep = max(1, int(n_laps * percent / 100))
             filtered_dfs.append(group_sorted.head(n_keep))
+        if not filtered_dfs:
+            return pd.DataFrame()
         return pd.concat(filtered_dfs)
 
     filtered_df = filter_top_percent_laps(df, top_percent)
+
+    if filtered_df.empty:
+        st.info("No lap data available for the selected filters.")
+        return
 
     # --- Average lap times per car ---
     avg_df = (

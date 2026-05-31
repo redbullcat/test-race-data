@@ -3,7 +3,7 @@ import plotly.express as px
 import streamlit as st
 from utils import lap_to_seconds
 
-def show_practice_fastest_runs(df, team_colors):
+def show_practice_fastest_runs(df, team_colors, key_prefix="prac"):
     st.subheader("Fastest Run Average Pace by Car")
 
     # --- Classes filter ---
@@ -12,7 +12,7 @@ def show_practice_fastest_runs(df, team_colors):
         "Select Class(es):",
         options=classes,
         default=classes,
-        key="practice_fastest_runs_class_filter"
+        key=f"{key_prefix}_frun_class"
     )
 
     filtered_df = df[df["CLASS"].isin(selected_classes)]
@@ -23,7 +23,7 @@ def show_practice_fastest_runs(df, team_colors):
         "Select Car(s):",
         options=available_cars,
         default=available_cars,
-        key="practice_fastest_runs_car_filter"
+        key=f"{key_prefix}_frun_car"
     )
 
     # --- Top lap % slider ---
@@ -33,7 +33,7 @@ def show_practice_fastest_runs(df, team_colors):
         100,
         100,
         step=20,
-        key="practice_fastest_runs_top_lap_filter",
+        key=f"{key_prefix}_frun_top_lap",
         help="Use 0% to hide all data."
     )
 

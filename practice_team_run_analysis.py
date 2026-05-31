@@ -16,7 +16,7 @@ def parse_hour_time(series: pd.Series) -> pd.Series:
     return dt
 
 
-def show_practice_team_run_analysis(df, team_colors):
+def show_practice_team_run_analysis(df, team_colors, key_prefix="prac"):
     st.subheader("Team Run Analysis by Session")
 
     # ----------------------------
@@ -26,7 +26,7 @@ def show_practice_team_run_analysis(df, team_colors):
     selected_class = st.selectbox(
         "Select Class:",
         options=classes,
-        key="team_run_class_filter"
+        key=f"{key_prefix}_trun_class"
     )
 
     class_df = df[df["CLASS"] == selected_class]
@@ -35,7 +35,7 @@ def show_practice_team_run_analysis(df, team_colors):
     selected_team = st.selectbox(
         "Select Team:",
         options=teams,
-        key="team_run_team_filter"
+        key=f"{key_prefix}_trun_team"
     )
 
     team_df = class_df[class_df["TEAM"] == selected_team]
@@ -44,7 +44,7 @@ def show_practice_team_run_analysis(df, team_colors):
     selected_car = st.selectbox(
         "Select Car:",
         options=cars,
-        key="team_run_car_filter"
+        key=f"{key_prefix}_trun_car"
     )
 
     team_df = team_df[team_df["NUMBER"] == selected_car]

@@ -170,17 +170,17 @@ def show_practice_analysis(
         show_practice_fastest_laps(df)
 
     with st.expander("Pace Chart", expanded=True):
-        show_practice_pace_chart(df, team_colors)
+        show_practice_pace_chart(df, team_colors, key_prefix=key_prefix)
 
     with st.expander("Long Runs", expanded=True):
-        show_practice_long_runs(longest_stints_df, team_colors)
+        show_practice_long_runs(longest_stints_df, team_colors, key_prefix=key_prefix)
 
     with st.expander("Fastest Runs", expanded=True):
-        show_practice_fastest_runs(df, team_colors)
+        show_practice_fastest_runs(df, team_colors, key_prefix=key_prefix)
 
     with st.expander("Team Run Analysis", expanded=True):
         st.session_state["session_durations"] = durations
-        show_practice_team_run_analysis(df, team_colors)
+        show_practice_team_run_analysis(df, team_colors, key_prefix=key_prefix)
 
     with st.expander("Average Long Run Pace", expanded=False):
-        show_practice_average_long_run_pace(df, team_colors)
+        show_practice_average_long_run_pace(df, team_colors, key_prefix=key_prefix)

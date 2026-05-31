@@ -3,12 +3,12 @@ import streamlit as st
 from utils import lap_to_seconds
 import plotly.express as px
 
-def show_practice_average_long_run_pace(df, team_colors):
+def show_practice_average_long_run_pace(df, team_colors, key_prefix="prac"):
     st.subheader("Average Long Run Pace")
 
     # Filters
     classes = sorted(df["CLASS"].dropna().unique())
-    selected_class = st.selectbox("Select Class:", ["All"] + classes, index=0, key="avg_long_run_class")
+    selected_class = st.selectbox("Select Class:", ["All"] + classes, index=0, key=f"{key_prefix}_avg_class")
 
     df_filtered = df.copy()
     if selected_class != "All":
@@ -16,7 +16,7 @@ def show_practice_average_long_run_pace(df, team_colors):
 
     # Filter cars available after class filter
     cars = sorted(df_filtered["NUMBER"].dropna().unique())
-    selected_car = st.selectbox("Select Car:", ["All"] + cars, index=0, key="avg_long_run_car")
+    selected_car = st.selectbox("Select Car:", ["All"] + cars, index=0, key=f"{key_prefix}_avg_car")
 
     if selected_car != "All":
         df_filtered = df_filtered[df_filtered["NUMBER"] == selected_car]
@@ -98,7 +98,7 @@ def show_practice_average_long_run_pace(df, team_colors):
         value=100,
         step=20,
         format="%d%%",
-        key="avg_long_run_lap_percentage"
+        key=f"{key_prefix}_avg_pct"
     )
 
     if perc_slider == 0:

@@ -87,7 +87,7 @@ def show_practice_fastest_laps(df: pd.DataFrame):
     fastest["Class Position"] = (
         fastest.groupby("CLASS")["LAP_TIME_TD"]
         .rank(method="min")
-        .astype(int)
+        .astype("Int64")
     )
 
     leader_time = fastest.iloc[0]["LAP_TIME_TD"]

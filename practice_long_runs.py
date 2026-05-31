@@ -2,7 +2,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-def show_practice_long_runs(longest_stints_df, team_colors):
+def show_practice_long_runs(longest_stints_df, team_colors, key_prefix="prac"):
     st.subheader("Longest Run Pace by Car (Lap-by-Lap)")
 
     if longest_stints_df.empty:
@@ -15,7 +15,7 @@ def show_practice_long_runs(longest_stints_df, team_colors):
         "Select Class(es):",
         options=classes,
         default=classes,
-        key="practice_long_runs_class_filter"
+        key=f"{key_prefix}_lrun_class"
     )
 
     filtered_df = longest_stints_df[longest_stints_df["Class"].isin(selected_classes)]
@@ -25,7 +25,7 @@ def show_practice_long_runs(longest_stints_df, team_colors):
         "Select Car(s):",
         options=available_cars,
         default=available_cars,
-        key="practice_long_runs_car_filter"
+        key=f"{key_prefix}_lrun_car"
     )
 
     filtered_df = filtered_df[filtered_df["Car"].isin(selected_cars)]

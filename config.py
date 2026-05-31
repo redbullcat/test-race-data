@@ -24,6 +24,17 @@ SERIES_DISPLAY: dict[str, str] = {
 # ---------------------------------------------------------------------------
 SESSION_TYPES = ["race", "practice", "test", "qualifying"]
 
+
+# ---------------------------------------------------------------------------
+# Top class priority — used to auto-select the leading class when loading data.
+# Lists are checked in order; the first keyword that matches any class name
+# present in the data (case-insensitive substring) wins.
+# ---------------------------------------------------------------------------
+CLASS_PRIORITY: dict[str, list[str]] = {
+    "WEC":  ["hypercar", "lmp1"],
+    "IMSA": ["gtp", "dpi", "dp", "prototype"],
+    "ELMS": ["lmp2"],
+}
 # ---------------------------------------------------------------------------
 # Team colours
 # Keys are matched case-insensitively against the TEAM column.

@@ -172,7 +172,7 @@ def show_driver_stint_chart(df: pd.DataFrame, team_colors: dict) -> None:
             line=dict(color=colors_map.get(driver, "#888888")),
             marker=dict(size=4),
             legendgroup=driver,
-            showlegend=stint_row["Driver Stint"] == car_stints[car_stints["Driver"] == driver]["Driver Stint"].min(),
+            showlegend=bool(stint_row["Driver Stint"] == car_stints[car_stints["Driver"] == driver]["Driver Stint"].min()),
         ))
 
     fig3.update_layout(

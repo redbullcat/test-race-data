@@ -3,7 +3,7 @@
 import plotly.express as px
 import streamlit as st
 
-from utils import get_team_color, apply_dark_layout
+from utils import get_team_color, apply_dark_layout, sort_cars
 
 
 @st.cache_data(show_spinner=False)

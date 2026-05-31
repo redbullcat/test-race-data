@@ -5,7 +5,7 @@ from datetime import datetime
 import plotly.graph_objects as go
 import streamlit as st
 
-from utils import parse_hour_with_rollover, build_color_map, apply_dark_layout
+from utils import parse_hour_with_rollover, build_color_map, apply_dark_layout, sort_cars
 
 
 def get_filtered_race_data(df, race_start_date):

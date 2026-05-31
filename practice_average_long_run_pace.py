@@ -1,6 +1,6 @@
 import pandas as pd
 import streamlit as st
-from utils import lap_to_seconds
+from utils import lap_to_seconds, sort_cars
 import plotly.express as px
 
 def show_practice_average_long_run_pace(df, team_colors, key_prefix="prac"):

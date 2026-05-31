@@ -1,7 +1,7 @@
 import plotly.express as px
 import pandas as pd
 import streamlit as st
-from utils import lap_to_seconds
+from utils import lap_to_seconds, sort_cars
 
 def show_practice_pace_chart(df, team_colors, key_prefix="prac"):
     st.subheader("Average Practice Pace by Car")

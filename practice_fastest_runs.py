@@ -1,7 +1,7 @@
 import pandas as pd
 import plotly.express as px
 import streamlit as st
-from utils import lap_to_seconds
+from utils import lap_to_seconds, sort_cars
 
 def show_practice_fastest_runs(df, team_colors, key_prefix="prac"):
     st.subheader("Fastest Run Average Pace by Car")

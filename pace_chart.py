@@ -3,7 +3,7 @@
 import plotly.express as px
 import streamlit as st
 
-from utils import filter_top_percent, build_color_map, apply_dark_layout
+from utils import filter_top_percent, build_color_map, apply_dark_layout, sort_cars
 
 
 def show_pace_chart(df, team_colors):

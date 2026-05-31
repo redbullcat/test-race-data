@@ -123,10 +123,10 @@ if section == "📅 Season":
     st.title(f"📅 {selected_year} {selected_series_display} — Season")
     season_tab, track_tab = st.tabs(["Season comparison", "Track analysis"])
     with season_tab:
-        from pages.season_comparison import show_season_comparison
+        from _pages.season_comparison import show_season_comparison
         show_season_comparison(None, TEAM_COLORS, selected_year, selected_series)
     with track_tab:
-        from pages.track import show_track
+        from _pages.track import show_track
         show_track(None, TEAM_COLORS)
     st.stop()
 
@@ -208,7 +208,7 @@ with practice_tab:
     else:
         session_dir   = os.path.join(DATA_DIR, selected_series, selected_year, selected_event, "practice")
         session_files = event_sessions["practice"]
-        from pages.practice import show_practice
+        from _pages.practice import show_practice
         show_practice(session_dir=session_dir, session_files=session_files, team_colors=TEAM_COLORS)
 
 # ---------------------------------------------------------------------------
@@ -220,7 +220,7 @@ with qualifying_tab:
     else:
         session_dir   = os.path.join(DATA_DIR, selected_series, selected_year, selected_event, "qualifying")
         session_files = event_sessions["qualifying"]
-        from pages.qualifying import show_qualifying
+        from _pages.qualifying import show_qualifying
         show_qualifying(session_dir=session_dir, session_files=session_files, team_colors=TEAM_COLORS)
 
 # ---------------------------------------------------------------------------
@@ -305,5 +305,5 @@ with race_tab:
             show_tyre_analysis()
 
         with team_tab:
-            from pages.team_by_team import show_team_by_team
+            from _pages.team_by_team import show_team_by_team
             show_team_by_team(df_filtered, TEAM_COLORS)

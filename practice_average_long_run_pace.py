@@ -122,6 +122,9 @@ def show_practice_average_long_run_pace(df, team_colors, key_prefix="prac"):
         filtered_group = group[group["Lap_in_Stint"].isin(laps_to_keep)].copy()
         filtered_avg_lap_times_list.append(filtered_group)
 
+    if not filtered_avg_lap_times_list:
+        st.info("No long run data available for the selected filters.")
+        return
     filtered_avg_lap_times = pd.concat(filtered_avg_lap_times_list, ignore_index=True)
 
     if filtered_avg_lap_times.empty:

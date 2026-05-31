@@ -1,8 +1,5 @@
 """
 streamlit_app.py — On The Apex race data analyser.
-
-Directory structure: data/{SERIES}/{year}/{event}/{session_type}/{file}.csv
-Session types: race, practice, qualifying, test
 """
 
 import os
@@ -10,6 +7,7 @@ import streamlit as st
 
 from config import DATA_DIR, TEAM_COLORS, SERIES_DISPLAY, CLASS_PRIORITY
 from data_loader import load_file_index, load_race, parse_race_start_date
+from manifest import load_manifest, manifest_to_file_index, get_event_meta
 
 st.set_page_config(
     page_title="On The Apex",
@@ -19,9 +17,14 @@ st.set_page_config(
 )
 
 # ---------------------------------------------------------------------------
-# File index
+# File index — use manifest if available (fast), else walk filesystem
 # ---------------------------------------------------------------------------
-race_files = load_file_index(DATA_DIR)
+_manifest = load_manifest(DATA_DIR)
+if _manifest is not None:
+    race_files = manifest_to_file_index(_manifest)
+else:
+    race_files = load_file_index(DATA_DIR)
+    _manifest = {}
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -39,12 +42,7 @@ def format_event(slug: str) -> str:
     return slug.replace("-", " ").title()
 
 def default_class(series: str, classes: list[str]) -> str:
-    """
-    Return the top/leading class for a series based on what's actually
-    present in the data. Checks CLASS_PRIORITY keywords in order;
-    first keyword that is a substring of any class name wins.
-    Falls back to the first class alphabetically.
-    """
+    """Return the top/leading class present in the data for this series."""
     priority = CLASS_PRIORITY.get(series, [])
     classes_lower = {c.lower(): c for c in classes}
     for kw in priority:
@@ -52,6 +50,15 @@ def default_class(series: str, classes: list[str]) -> str:
             if kw in c_lower:
                 return c_orig
     return sorted(classes)[0] if classes else ""
+
+# ---------------------------------------------------------------------------
+# URL query param state — encodes series/year/event for bookmarkable links
+# ---------------------------------------------------------------------------
+params = st.query_params
+
+def _get_param(key: str, default: str) -> str:
+    val = params.get(key)
+    return val if val else default
 
 # ---------------------------------------------------------------------------
 # Sidebar
@@ -65,9 +72,13 @@ with st.sidebar:
     available_series  = sorted(race_files.keys())
     series_options    = [folder_to_display.get(s, s) for s in available_series]
 
-    # Default to WEC
     wec_display = folder_to_display.get("WEC", "FIA WEC")
-    default_series_idx = series_options.index(wec_display) if wec_display in series_options else 0
+    param_series = _get_param("series", wec_display)
+    default_series_idx = (
+        series_options.index(param_series)
+        if param_series in series_options
+        else (series_options.index(wec_display) if wec_display in series_options else 0)
+    )
 
     selected_series_display = st.selectbox(
         "Series", series_options, index=default_series_idx
@@ -79,7 +90,10 @@ with st.sidebar:
     if not years:
         st.error(f"No data for {selected_series_display}.")
         st.stop()
-    selected_year = st.selectbox("Year", years)  # most recent year first = index 0
+
+    param_year = _get_param("year", years[0])
+    default_year_idx = years.index(param_year) if param_year in years else 0
+    selected_year = st.selectbox("Year", years, index=default_year_idx)
 
     # ── All events for this year ─────────────────────────────────────────────
     all_events = race_files.get(selected_series, {}).get(selected_year, {})
@@ -87,7 +101,6 @@ with st.sidebar:
         st.error(f"No events for {selected_series_display} {selected_year}.")
         st.stop()
 
-    # Split into race weekends vs test events
     race_weekend_events = {
         slug: sessions for slug, sessions in all_events.items()
         if event_has_race(sessions) or (
@@ -100,21 +113,46 @@ with st.sidebar:
         if slug not in race_weekend_events
     }
 
-    # ── Event (race weekends only — shown here, before section selector) ────
+    # ── Event dropdown (race weekends) ──────────────────────────────────────
     race_event_slugs = sorted(race_weekend_events.keys())
-    # Default to last event (most recent = last alphabetically/chronologically)
-    default_event_idx = len(race_event_slugs) - 1 if race_event_slugs else 0
-    selected_event = st.selectbox(
-        "Event",
-        race_event_slugs,
-        index=default_event_idx,
-        format_func=format_event,
-    ) if race_event_slugs else None
+
+    if race_event_slugs:
+        param_event = _get_param("event", race_event_slugs[-1])
+        default_event_idx = (
+            race_event_slugs.index(param_event)
+            if param_event in race_event_slugs
+            else len(race_event_slugs) - 1
+        )
+
+        def _event_label(slug: str) -> str:
+            label = format_event(slug)
+            meta = get_event_meta(_manifest, selected_series, selected_year, slug)
+            if meta.get("laps"):
+                label += f"  ({meta['laps']:,} laps)"
+            return label
+
+        selected_event = st.selectbox(
+            "Event",
+            race_event_slugs,
+            index=default_event_idx,
+            format_func=_event_label,
+        )
+    else:
+        selected_event = None
 
     # ── Section selector ────────────────────────────────────────────────────
     st.divider()
     sections = ["🏁 Race Weekend", "🔧 Tests", "📅 Season"]
     section  = st.radio("Section", sections, label_visibility="collapsed")
+
+# ---------------------------------------------------------------------------
+# Update URL params to reflect current selection
+# ---------------------------------------------------------------------------
+st.query_params.update({
+    "series": selected_series_display,
+    "year":   selected_year,
+    "event":  selected_event or "",
+})
 
 # ---------------------------------------------------------------------------
 # Season section
@@ -178,16 +216,52 @@ if not race_weekend_events or selected_event is None:
 
 event_sessions = race_weekend_events[selected_event]
 event_display  = format_event(selected_event)
-
 st.title(f"🏁 {selected_year} {selected_series_display} — {event_display}")
 
 # ---------------------------------------------------------------------------
-# Race Weekend tabs — Practice / Qualifying / Race
+# Shared class filter — sits above the session tabs, applies to Race tab
+# Pre-loaded here so class is known before any tab is clicked
 # ---------------------------------------------------------------------------
 has_practice   = "practice"   in event_sessions
 has_qualifying = "qualifying" in event_sessions
 has_race       = "race"       in event_sessions
 
+# Pre-load race data eagerly (small overhead, eliminates per-tab delay)
+_df_race = None
+_race_start_date = None
+_classes = []
+
+if has_race:
+    _race_session_dir = os.path.join(DATA_DIR, selected_series, selected_year, selected_event, "race")
+    _race_files       = event_sessions["race"]
+    _race_file_path   = os.path.join(_race_session_dir, _race_files[0])
+    with st.spinner("Loading race data…"):
+        _df_race = load_race(_race_file_path, selected_year, selected_series)
+    _race_start_date = parse_race_start_date(_race_files[0])
+    _classes = sorted(_df_race["CLASS"].dropna().unique())
+
+# Shared class selector (only shown when race data is available)
+_selected_class_filter = None
+_df_filtered = _df_race
+
+if _df_race is not None and len(_classes) > 1:
+    top_class = default_class(selected_series, list(_classes))
+    class_options     = ["All classes"] + list(_classes)
+    default_class_idx = class_options.index(top_class) if top_class in class_options else 0
+    _selected_class_filter = st.selectbox(
+        "Class", class_options, index=default_class_idx, key="race_class_filter"
+    )
+    _df_filtered = (
+        _df_race[_df_race["CLASS"] == _selected_class_filter].copy()
+        if _selected_class_filter != "All classes"
+        else _df_race
+    )
+elif _df_race is not None and len(_classes) == 1:
+    _selected_class_filter = _classes[0]
+
+# ---------------------------------------------------------------------------
+# Race Weekend tabs
+# ---------------------------------------------------------------------------
 def tab_label(label: str, available: bool) -> str:
     return label if available else f"{label} (no data)"
 
@@ -199,9 +273,7 @@ tab_labels = [
 
 practice_tab, qualifying_tab, race_tab = st.tabs(tab_labels)
 
-# ---------------------------------------------------------------------------
-# Practice tab
-# ---------------------------------------------------------------------------
+# ── Practice ────────────────────────────────────────────────────────────────
 with practice_tab:
     if not has_practice:
         st.info("No practice data available for this event.")
@@ -211,9 +283,7 @@ with practice_tab:
         from _pages.practice import show_practice
         show_practice(session_dir=session_dir, session_files=session_files, team_colors=TEAM_COLORS)
 
-# ---------------------------------------------------------------------------
-# Qualifying tab
-# ---------------------------------------------------------------------------
+# ── Qualifying ──────────────────────────────────────────────────────────────
 with qualifying_tab:
     if not has_qualifying:
         st.info("No qualifying data available for this event.")
@@ -223,19 +293,15 @@ with qualifying_tab:
         from _pages.qualifying import show_qualifying
         show_qualifying(session_dir=session_dir, session_files=session_files, team_colors=TEAM_COLORS)
 
-# ---------------------------------------------------------------------------
-# Race tab
-# ---------------------------------------------------------------------------
+# ── Race ────────────────────────────────────────────────────────────────────
 with race_tab:
     if not has_race:
         st.info("No race data available for this event.")
+    elif _df_filtered is None or _df_filtered.empty:
+        st.warning("No data for the selected class.")
     else:
-        session_dir   = os.path.join(DATA_DIR, selected_series, selected_year, selected_event, "race")
-        session_files = event_sessions["race"]
-        file_path     = os.path.join(session_dir, session_files[0])
-
-        df             = load_race(file_path, selected_year, selected_series)
-        race_start_date = parse_race_start_date(session_files[0])
+        df = _df_filtered
+        race_start_date = _race_start_date
 
         if race_start_date is None:
             st.warning(
@@ -243,30 +309,8 @@ with race_tab:
                 "Run `add_dates_to_race_files.py` to fix."
             )
 
-        # ── Class filter — defaults to top class for this series ────────────
-        classes = sorted(df["CLASS"].dropna().unique())
-        if len(classes) > 1:
-            top_class = default_class(selected_series, list(classes))
-            class_options   = ["All classes"] + classes
-            default_class_idx = class_options.index(top_class) if top_class in class_options else 0
-            selected_class_filter = st.selectbox(
-                "Class",
-                class_options,
-                index=default_class_idx,
-                key="race_class_filter",
-            )
-            df_filtered = (
-                df[df["CLASS"] == selected_class_filter].copy()
-                if selected_class_filter != "All classes"
-                else df
-            )
-        else:
-            df_filtered           = df
-            selected_class_filter = classes[0] if classes else "All"
-
-        # ── Race sub-tabs ───────────────────────────────────────────────────
-        results_tab, pace_tab, battle_tab, pits_tab, team_tab = st.tabs([
-            "Results", "Pace", "Battle", "Pit stops", "Team by team"
+        results_tab, pace_tab, battle_tab, analysis_tab, team_tab = st.tabs([
+            "Results", "Pace", "Battle", "Analysis", "Team by team"
         ])
 
         with results_tab:
@@ -274,36 +318,64 @@ with race_tab:
             from results_table import show_results_table
             from lap_position_chart import show_lap_position_chart
             if race_start_date:
-                show_race_stats(df_filtered, race_start_date)
-            show_results_table(df_filtered, TEAM_COLORS)
-            show_lap_position_chart(df_filtered, TEAM_COLORS)
+                show_race_stats(df, race_start_date)
+            show_results_table(df, TEAM_COLORS)
+            show_lap_position_chart(df, TEAM_COLORS)
 
         with pace_tab:
             from pace_chart import show_pace_chart
             from driver_pace_chart import show_driver_pace_chart
             from driver_pace_comparison_chart import show_driver_pace_comparison
             from stint_pace_chart import show_stint_pace_chart
-            show_pace_chart(df_filtered, TEAM_COLORS)
-            show_driver_pace_chart(df_filtered, TEAM_COLORS)
-            show_driver_pace_comparison(df_filtered, TEAM_COLORS)
-            show_stint_pace_chart(df_filtered, TEAM_COLORS)
+            from pace_consistency_chart import show_pace_consistency_chart
+            show_pace_chart(df, TEAM_COLORS)
+            st.divider()
+            show_pace_consistency_chart(df, TEAM_COLORS)
+            st.divider()
+            show_driver_pace_chart(df, TEAM_COLORS)
+            st.divider()
+            show_driver_pace_comparison(df, TEAM_COLORS)
+            st.divider()
+            show_stint_pace_chart(df, TEAM_COLORS)
 
         with battle_tab:
             from gap_evolution_chart import get_filtered_race_data, show_gap_evolution_chart, show_cumulative_time_chart
             if race_start_date is None:
                 st.info("Gap evolution requires a race start date in the filename.")
             else:
-                filtered_df, selected_class, selected_cars, lap_range = get_filtered_race_data(
-                    df_filtered, race_start_date
-                )
-                if filtered_df is not None:
-                    show_gap_evolution_chart(filtered_df, TEAM_COLORS, selected_class, selected_cars)
-                    show_cumulative_time_chart(filtered_df, TEAM_COLORS, selected_class, selected_cars)
+                # Lazy trigger — avoids computing gap chart until user explicitly wants it
+                if st.button("Generate gap evolution", key="gap_trigger"):
+                    st.session_state["gap_active"] = True
+                if st.session_state.get("gap_active"):
+                    filtered_df, selected_class, selected_cars, lap_range = get_filtered_race_data(
+                        df, race_start_date
+                    )
+                    if filtered_df is not None:
+                        show_gap_evolution_chart(filtered_df, TEAM_COLORS, selected_class, selected_cars)
+                        show_cumulative_time_chart(filtered_df, TEAM_COLORS, selected_class, selected_cars)
+                else:
+                    st.info("Click 'Generate gap evolution' to load the chart. "
+                            "This may take a moment for long races.")
 
-        with pits_tab:
-            from race_tyre_analysis import show_tyre_analysis
-            show_tyre_analysis()
+        with analysis_tab:
+            from tyre_deg_chart import show_tyre_deg_chart
+            from pit_delta_chart import show_pit_delta_chart
+            from strategy_chart import show_strategy_chart
+
+            analysis_sections = st.tabs(["Strategy", "Tyre Degradation", "Pit Stops"])
+
+            with analysis_sections[0]:
+                show_strategy_chart(df, TEAM_COLORS)
+
+            with analysis_sections[1]:
+                show_tyre_deg_chart(df, TEAM_COLORS)
+
+            with analysis_sections[2]:
+                show_pit_delta_chart(df, TEAM_COLORS)
 
         with team_tab:
+            from driver_stint_chart import show_driver_stint_chart
             from _pages.team_by_team import show_team_by_team
-            show_team_by_team(df_filtered, TEAM_COLORS)
+            show_driver_stint_chart(df, TEAM_COLORS)
+            st.divider()
+            show_team_by_team(df, TEAM_COLORS)

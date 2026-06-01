@@ -175,19 +175,36 @@ def detect_events(df: pd.DataFrame, selected_class: str) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 @st.cache_data(show_spinner=False)
-def _compute_gaps(df: pd.DataFrame, race_start_date, ref_car: str) -> pd.DataFrame:
-    """Compute gap to a reference car for all cars, per lap."""
+def _compute_gaps(df: pd.DataFrame, ref_car: str) -> pd.DataFrame:
+    """
+    Compute gap to a reference car for all cars, per lap.
+    Uses ELAPSED_SECONDS (cumulative race time) directly — no HOUR parsing needed.
+    ELAPSED_SECONDS is already correct and handles midnight rollover via load_race.
+    """
+    if "ELAPSED_SECONDS" not in df.columns:
+        return pd.DataFrame()
+
     df = df.copy()
-    df["HOUR_DT"] = parse_hour_with_rollover(df, race_start_date)
-    race_start_dt = datetime.combine(race_start_date, datetime.min.time())
-    df["CUM_TIME_SEC"] = (df["HOUR_DT"] - race_start_dt).dt.total_seconds()
+    df = df.dropna(subset=["ELAPSED_SECONDS", "LAP_NUMBER"])
+    df["LAP_NUMBER"] = df["LAP_NUMBER"].astype(int)
+
+    # Reference car: one row per lap (take the first crossing, not pit laps)
+    ref_df = df[df["NUMBER"] == ref_car].copy()
+    if "CROSSING_FINISH_LINE_IN_PIT" in ref_df.columns:
+        ref_clean = ref_df[ref_df["CROSSING_FINISH_LINE_IN_PIT"].astype(str).str.strip().str.upper() != "B"]
+        if not ref_clean.empty:
+            ref_df = ref_clean
 
     ref = (
-        df[df["NUMBER"] == ref_car][["LAP_NUMBER", "CUM_TIME_SEC"]]
-        .rename(columns={"CUM_TIME_SEC": "REF_TIME"})
+        ref_df.sort_values("ELAPSED_SECONDS")
+        .groupby("LAP_NUMBER")["ELAPSED_SECONDS"]
+        .first()
+        .reset_index()
+        .rename(columns={"ELAPSED_SECONDS": "REF_TIME"})
     )
+
     merged = df.merge(ref, on="LAP_NUMBER", how="left")
-    merged["GAP"] = merged["CUM_TIME_SEC"] - merged["REF_TIME"]
+    merged["GAP"] = merged["ELAPSED_SECONDS"] - merged["REF_TIME"]
     return merged
 
 
@@ -244,8 +261,12 @@ def _annotation_editor(events: list[dict], key_prefix: str) -> list[dict]:
             current.sort(key=lambda e: e["lap"])
             st.rerun()
 
-    if st.button("↩ Reset to auto-detected", key=f"{key_prefix}_reset_btn"):
+    col_r, col_d = st.columns(2)
+    if col_r.button("↩ Reset to auto-detected", key=f"{key_prefix}_reset_btn"):
         st.session_state[f"{key_prefix}_reset"] = True
+        st.rerun()
+    if col_d.button("🗑 Delete all annotations", key=f"{key_prefix}_delete_all"):
+        st.session_state["story_events"] = []
         st.rerun()
 
     # Editable rows
@@ -365,7 +386,6 @@ def _add_annotations(fig, events: list[dict], y_ref: str = "paper",
 
 def _build_gap_story(
     df: pd.DataFrame,
-    race_start_date,
     selected_cars: list[str],
     ref_car: str,
     team_colors: dict,
@@ -374,7 +394,7 @@ def _build_gap_story(
     headline: str,
     subtitle: str,
 ) -> go.Figure:
-    merged = _compute_gaps(df, race_start_date, ref_car)
+    merged = _compute_gaps(df, ref_car)
     merged = merged[
         merged["NUMBER"].isin(selected_cars) &
         merged["LAP_NUMBER"].between(lap_range[0], lap_range[1])
@@ -594,12 +614,19 @@ def show_story(df: pd.DataFrame, team_colors: dict, race_start_date) -> None:
     # ── Auto-detect events ───────────────────────────────────────────────
     auto_events = detect_events(class_df, selected_class)
 
-    # Filter to selected cars and lap range
+    # Filter to selected cars and lap range — only show events for selected cars
     auto_events = [
         e for e in auto_events
         if lap_range[0] <= e["lap"] <= lap_range[1]
         and (e["car"] == "All" or e["car"] in selected_cars)
     ]
+
+    # If the car selection has changed, reset annotation state so stale
+    # events from removed cars don't persist
+    cars_key = f"story_cars_prev_{key_prefix if False else 'story'}"
+    if st.session_state.get(cars_key) != tuple(sorted(selected_cars)):
+        st.session_state["story_events"] = [e.copy() for e in auto_events]
+        st.session_state[cars_key] = tuple(sorted(selected_cars))
 
     # ── Annotation editor ────────────────────────────────────────────────
     with st.expander("📝 Edit annotations", expanded=False):
@@ -625,7 +652,6 @@ def show_story(df: pd.DataFrame, team_colors: dict, race_start_date) -> None:
     if chart_type == "Gap evolution (filled area)":
         fig = _build_gap_story(
             df=filtered_class_df,
-            race_start_date=race_start_date,
             selected_cars=selected_cars,
             ref_car=ref_car,
             team_colors=team_colors,

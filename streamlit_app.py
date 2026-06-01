@@ -309,8 +309,8 @@ with race_tab:
                 "Run `add_dates_to_race_files.py` to fix."
             )
 
-        results_tab, pace_tab, battle_tab, analysis_tab, team_tab = st.tabs([
-            "Results", "Pace", "Battle", "Analysis", "Team by team"
+        results_tab, pace_tab, battle_tab, story_tab, analysis_tab, team_tab = st.tabs([
+            "Results", "Pace", "Battle", "Story", "Analysis", "Team by team"
         ])
 
         with results_tab:
@@ -356,6 +356,10 @@ with race_tab:
                 else:
                     st.info("Click 'Generate gap evolution' to load the chart. "
                             "This may take a moment for long races.")
+
+        with story_tab:
+            from story_chart import show_story
+            show_story(df, TEAM_COLORS, race_start_date)
 
         with analysis_tab:
             from tyre_deg_chart import show_tyre_deg_chart

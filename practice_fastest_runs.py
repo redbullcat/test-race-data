@@ -57,9 +57,14 @@ def show_practice_fastest_runs(df, team_colors, key_prefix="prac"):
             n_laps = len(group_sorted)
             n_keep = max(1, int(n_laps * percent / 100))
             filtered_dfs.append(group_sorted.head(n_keep))
+        if not filtered_dfs:
+            return pd.DataFrame()
         return pd.concat(filtered_dfs)
 
     filtered_df = filter_top_percent_laps(filtered_df, top_percent)
+    if filtered_df.empty:
+        st.info("No lap data available for the selected filters.")
+        return
 
     # --- Find fastest no-pit stint per car (minimum 7 laps) ---
     fastest_runs = []

@@ -301,11 +301,19 @@ def _annotation_editor(events: list[dict], key_prefix: str) -> list[dict]:
 
     st.divider()
 
+    # Column header for Y position
+    hdr = st.columns([0.5, 1, 3.5, 1, 1.5, 1])
+    hdr[0].caption("Show"); hdr[1].caption("Lap"); hdr[2].caption("Text")
+    hdr[3].caption("Y pos"); hdr[4].caption("Category"); hdr[5].caption("")
+
     # Editable rows
     to_delete = []
     for i, evt in enumerate(current):
+        # Default y_pos: auto-spread from top (0.95) downwards in steps of 0.10
+        if "y_pos" not in evt:
+            evt["y_pos"] = round(0.95 - (i % 8) * 0.10, 2)
         with st.container():
-            cols = st.columns([0.5, 1, 4, 1.5, 1])
+            cols = st.columns([0.5, 1, 3.5, 1, 1.5, 1])
             evt["visible"] = cols[0].checkbox(
                 "Show", value=evt["visible"], key=f"{key_prefix}_vis_{i}", label_visibility="hidden"
             )
@@ -317,12 +325,18 @@ def _annotation_editor(events: list[dict], key_prefix: str) -> list[dict]:
                 "Text", value=evt["text"],
                 key=f"{key_prefix}_txt_{i}", label_visibility="collapsed"
             )
-            evt["category"] = cols[3].selectbox(
+            evt["y_pos"] = round(float(cols[3].number_input(
+                "Y", value=float(evt["y_pos"]),
+                min_value=0.0, max_value=1.0, step=0.05, format="%.2f",
+                key=f"{key_prefix}_ypos_{i}", label_visibility="collapsed",
+                help="Vertical position (0=bottom, 1=top)"
+            )), 2)
+            evt["category"] = cols[4].selectbox(
                 "Cat", list(ANNOTATION_COLOURS.keys()),
                 index=list(ANNOTATION_COLOURS.keys()).index(evt.get("category", "Custom")),
                 key=f"{key_prefix}_cat_{i}", label_visibility="collapsed"
             )
-            if cols[4].button("🗑", key=f"{key_prefix}_del_{i}"):
+            if cols[5].button("🗑", key=f"{key_prefix}_del_{i}"):
                 to_delete.append(i)
 
     for i in sorted(to_delete, reverse=True):
@@ -371,18 +385,20 @@ def _add_annotations(fig, events: list[dict], y_ref: str = "paper",
                       y_frac: float = 0.95) -> None:
     """
     Add vertical lines + text labels for each visible annotation.
-    Events with the same lap are staggered vertically.
+    Y position comes from evt["y_pos"] (0–1 paper coords, set by user).
+    Falls back to auto-spread from y_frac if not set.
     """
     visible = [e for e in events if e.get("visible")]
-    # Group by lap for staggering
-    by_lap: dict[int, list] = {}
-    for e in visible:
-        by_lap.setdefault(e["lap"], []).append(e)
+    # Track which laps already have a vline to avoid duplicates
+    vlines_added: set = set()
 
-    for lap, lap_events in by_lap.items():
-        for i, evt in enumerate(lap_events):
-            color = ANNOTATION_COLOURS.get(evt.get("category", "Custom"), "#FFFFFF")
-            # Vertical line
+    for i, evt in enumerate(visible):
+        lap   = evt["lap"]
+        color = ANNOTATION_COLOURS.get(evt.get("category", "Custom"), "#FFFFFF")
+        y_pos = evt.get("y_pos", round(y_frac - (i % 8) * 0.10, 2))
+
+        # Vertical line — one per lap regardless of how many annotations share it
+        if lap not in vlines_added:
             fig.add_vline(
                 x=lap,
                 line_color=color,
@@ -390,31 +406,72 @@ def _add_annotations(fig, events: list[dict], y_ref: str = "paper",
                 line_dash="dot",
                 opacity=0.8,
             )
-            # Text annotation, staggered vertically if multiple on same lap
-            y_pos = y_frac - i * 0.10
-            fig.add_annotation(
-                x=lap,
-                y=y_pos,
-                yref=y_ref,
-                text=evt["text"],
-                showarrow=True,
-                arrowhead=2,
-                arrowcolor=color,
-                arrowwidth=1.5,
-                font=dict(color=color, size=11),
-                bgcolor="rgba(0,0,0,0.65)",
-                bordercolor=color,
-                borderwidth=1,
-                borderpad=3,
-                ax=20,
-                ay=-30,
-                xanchor="left",
-            )
+            vlines_added.add(lap)
+
+        fig.add_annotation(
+            x=lap,
+            y=y_pos,
+            yref=y_ref,
+            text=evt["text"],
+            showarrow=True,
+            arrowhead=2,
+            arrowcolor=color,
+            arrowwidth=1.5,
+            font=dict(color=color, size=11),
+            bgcolor="rgba(0,0,0,0.65)",
+            bordercolor=color,
+            borderwidth=1,
+            borderpad=3,
+            ax=20,
+            ay=-30,
+            xanchor="left",
+        )
 
 
 # ---------------------------------------------------------------------------
 # Gap evolution story chart
 # ---------------------------------------------------------------------------
+
+def _add_logo_to_fig(
+    fig,
+    logo_path: str | None,
+    show_logo: bool,
+    position: str,
+    size: float,
+    opacity: float,
+) -> None:
+    """Add a logo SVG as a Plotly layout image."""
+    if not show_logo or not logo_path:
+        return
+    import base64, os as _os
+    try:
+        with open(logo_path, "rb") as f:
+            b64 = base64.b64encode(f.read()).decode()
+        ext = _os.path.splitext(logo_path)[1].lstrip(".")
+        mime = "image/svg+xml" if ext == "svg" else f"image/{ext}"
+        src = f"data:{mime};base64,{b64}"
+    except Exception:
+        return
+
+    # Map position label to paper coordinates
+    pos_map = {
+        "Bottom right": (1.0, 0.0, "right",  "bottom"),
+        "Bottom left":  (0.0, 0.0, "left",   "bottom"),
+        "Top right":    (1.0, 1.0, "right",  "top"),
+        "Top left":     (0.0, 1.0, "left",   "top"),
+    }
+    x, y, xanchor, yanchor = pos_map.get(position, (1.0, 0.0, "right", "bottom"))
+
+    fig.add_layout_image(dict(
+        source=src,
+        xref="paper", yref="paper",
+        x=x, y=y,
+        sizex=size, sizey=size,
+        xanchor=xanchor, yanchor=yanchor,
+        opacity=opacity,
+        layer="above",
+    ))
+
 
 def _build_gap_story(
     df: pd.DataFrame,
@@ -425,6 +482,11 @@ def _build_gap_story(
     lap_range: tuple[int, int],
     headline: str,
     subtitle: str,
+    logo_path: str | None = None,
+    show_logo: bool = False,
+    logo_position: str = "Bottom right",
+    logo_size: float = 0.18,
+    logo_opacity: float = 0.6,
 ) -> go.Figure:
     merged = _compute_gaps(df, ref_car)
     merged = merged[
@@ -519,6 +581,11 @@ def _build_position_story(
     lap_range: tuple[int, int],
     headline: str,
     subtitle: str,
+    logo_path: str | None = None,
+    show_logo: bool = False,
+    logo_position: str = "Bottom right",
+    logo_size: float = 0.18,
+    logo_opacity: float = 0.6,
 ) -> go.Figure:
     pos_df = _compute_positions(df)
     if pos_df.empty:
@@ -563,6 +630,7 @@ def _build_position_story(
         height=550,
     )
     apply_dark_layout(fig)
+    _add_logo_to_fig(fig, logo_path, show_logo, logo_position, logo_size, logo_opacity)
     return fig
 
 
@@ -643,6 +711,27 @@ def show_story(df: pd.DataFrame, team_colors: dict, race_start_date) -> None:
         key="story_subtitle",
     )
 
+    # ── Logo ─────────────────────────────────────────────────────────────
+    import os as _os
+    logo_col1, logo_col2, logo_col3, logo_col4 = st.columns([1, 1, 1, 1])
+    show_logo = logo_col1.checkbox("Show logo", value=False, key="story_show_logo")
+    logo_position = logo_col2.selectbox(
+        "Logo position", ["Bottom right", "Bottom left", "Top right", "Top left"],
+        key="story_logo_pos"
+    )
+    logo_opacity = logo_col3.slider("Logo opacity", 0.1, 1.0, 0.6, 0.05, key="story_logo_opacity")
+    logo_size = logo_col4.slider("Logo size", 0.05, 0.35, 0.18, 0.01, key="story_logo_size")
+
+    # Resolve logo path — look for white version (better on dark background)
+    _repo_root = _os.path.dirname(_os.path.abspath(__file__))
+    _logo_candidates = [
+        _os.path.join(_repo_root, "colour-white.svg"),
+        _os.path.join(_repo_root, "colour-black.svg"),
+        _os.path.join(_repo_root, "logo.svg"),
+        _os.path.join(_repo_root, "logo-white.svg"),
+    ]
+    logo_path = next((p for p in _logo_candidates if _os.path.exists(p)), None)
+
     # ── Auto-detect events ───────────────────────────────────────────────
     auto_events = detect_events(class_df, selected_class)
 
@@ -712,6 +801,11 @@ def show_story(df: pd.DataFrame, team_colors: dict, race_start_date) -> None:
             lap_range=lap_range,
             headline=headline,
             subtitle=subtitle,
+            logo_path=logo_path,
+            show_logo=show_logo,
+            logo_position=logo_position,
+            logo_size=logo_size,
+            logo_opacity=logo_opacity,
         )
     else:
         fig = _build_position_story(
@@ -722,6 +816,11 @@ def show_story(df: pd.DataFrame, team_colors: dict, race_start_date) -> None:
             lap_range=lap_range,
             headline=headline,
             subtitle=subtitle,
+            logo_path=logo_path,
+            show_logo=show_logo,
+            logo_position=logo_position,
+            logo_size=logo_size,
+            logo_opacity=logo_opacity,
         )
 
     if fig.data:

@@ -856,10 +856,11 @@ def show_story(df: pd.DataFrame, team_colors: dict, race_start_date) -> None:
   const _h = {export_height};
 
   function exportChart(fmt) {{
-    // Find the plotly div — Streamlit renders multiple, grab the most recent
-    const divs = document.querySelectorAll('.js-plotly-plot');
+    // Streamlit renders components in iframes — we must search the parent document
+    const doc  = window.parent ? window.parent.document : document;
+    const divs = doc.querySelectorAll('.js-plotly-plot');
     const div  = divs[divs.length - 1];
-    if (!div) {{ alert('Chart not found — try scrolling the chart into view first.'); return; }}
+    if (!div) {{ alert('Chart not found.'); return; }}
     Plotly.downloadImage(div, {{
       format:   fmt,
       width:    _w,

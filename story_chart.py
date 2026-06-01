@@ -826,52 +826,54 @@ def show_story(df: pd.DataFrame, team_colors: dict, race_start_date) -> None:
     if fig.data:
         st.plotly_chart(fig, width="stretch")
 
-        # ── Export buttons — browser-side, no kaleido needed ────────────
-        safe_name = (headline or "race_story").replace(" ", "_").replace("/", "-")
+        # ── Export buttons — inject SVG/PNG export into main page via markdown ──
+        # st.markdown with unsafe_allow_html runs in the main page context,
+        # not an iframe, so it can find the Plotly divs directly.
+        safe_name    = (headline or "race_story").replace(" ", "_").replace("/", "-")
         export_width  = 1800
         export_height = 750
 
-        # Inject a small HTML snippet that uses Plotly's built-in JS export.
-        # We pass the figure JSON so the JS can reconstruct and download it.
-        import json as _json
-        fig_json = fig.to_json()
+        # Unique key per render to avoid stale JS state across reruns
+        import time as _time
+        _uid = str(int(_time.time() * 1000))[-6:]
 
-        export_html = f"""
-<div style="display:flex;gap:10px;margin-top:4px;">
-  <button onclick="exportChart('svg')"
+        st.markdown(f"""
+<div style="display:flex;gap:10px;margin:4px 0 8px 0;">
+  <button id="btn_svg_{_uid}"
     style="background:#1f1f2e;color:#fff;border:1px solid #555;padding:6px 14px;
            border-radius:4px;cursor:pointer;font-size:13px;">
     ⬇ Export SVG
   </button>
-  <button onclick="exportChart('png')"
+  <button id="btn_png_{_uid}"
     style="background:#1f1f2e;color:#fff;border:1px solid #555;padding:6px 14px;
            border-radius:4px;cursor:pointer;font-size:13px;">
     ⬇ Export PNG (3×)
   </button>
 </div>
 <script>
-  const _figData = {fig_json};
-  const _fname   = "{safe_name}";
-  const _w = {export_width};
-  const _h = {export_height};
-
-  function exportChart(fmt) {{
-    // Streamlit renders components in iframes — we must search the parent document
-    const doc  = window.parent ? window.parent.document : document;
-    const divs = doc.querySelectorAll('.js-plotly-plot');
-    const div  = divs[divs.length - 1];
-    if (!div) {{ alert('Chart not found.'); return; }}
+(function() {{
+  function doExport(fmt) {{
+    var divs = document.querySelectorAll('.js-plotly-plot');
+    if (!divs.length) {{ alert('No chart found on page.'); return; }}
+    var div = divs[divs.length - 1];
     Plotly.downloadImage(div, {{
       format:   fmt,
-      width:    _w,
-      height:   _h,
+      width:    {export_width},
+      height:   {export_height},
       scale:    fmt === 'png' ? 3 : 1,
-      filename: _fname,
+      filename: '{safe_name}',
     }});
   }}
+  // Attach after a short delay to ensure DOM is ready
+  setTimeout(function() {{
+    var svg_btn = document.getElementById('btn_svg_{_uid}');
+    var png_btn = document.getElementById('btn_png_{_uid}');
+    if (svg_btn) svg_btn.onclick = function() {{ doExport('svg'); }};
+    if (png_btn) png_btn.onclick = function() {{ doExport('png'); }};
+  }}, 300);
+}})();
 </script>
-"""
-        st.components.v1.html(export_html, height=50)
+""", unsafe_allow_html=True)
     else:
         st.info("No data to display for the selected cars and lap range.")
 

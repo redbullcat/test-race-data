@@ -254,7 +254,7 @@ def _annotation_editor(events: list[dict], key_prefix: str) -> list[dict]:
         with st.container():
             cols = st.columns([0.5, 1, 4, 1.5, 1])
             evt["visible"] = cols[0].checkbox(
-                "", value=evt["visible"], key=f"{key_prefix}_vis_{i}", label_visibility="collapsed"
+                "Show", value=evt["visible"], key=f"{key_prefix}_vis_{i}", label_visibility="hidden"
             )
             evt["lap"]  = int(cols[1].number_input(
                 "Lap", value=int(evt["lap"]), min_value=1,
@@ -406,13 +406,26 @@ def _build_gap_story(
         team  = car_data["TEAM"].iloc[0]
         color = color_map.get(team, "#AAAAAA")
 
-        # Filled area
+        # Filled area — build rgba() fillcolor from hex or existing rgb/rgba
+        def _to_rgba(c: str, alpha: float = 0.25) -> str:
+            c = c.strip()
+            if c.startswith("rgba"):
+                return c  # already rgba, leave as-is
+            if c.startswith("rgb("):
+                return c.replace("rgb(", "rgba(").rstrip(")") + f",{alpha})"
+            if c.startswith("#"):
+                h = c.lstrip("#")
+                if len(h) == 3:
+                    h = "".join(x*2 for x in h)
+                r, g, b = int(h[0:2],16), int(h[2:4],16), int(h[4:6],16)
+                return f"rgba({r},{g},{b},{alpha})"
+            return f"rgba(170,170,170,{alpha})"
+
         fig.add_trace(go.Scatter(
             x=pd.concat([car_data["LAP_NUMBER"], car_data["LAP_NUMBER"].iloc[::-1]]).tolist(),
             y=pd.concat([car_data["GAP"], pd.Series([0] * len(car_data))]).tolist(),
             fill="tozeroy",
-            fillcolor=color.replace(")", ",0.25)").replace("rgb", "rgba") if "rgb" in color
-                       else color + "40",
+            fillcolor=_to_rgba(color, 0.25),
             line=dict(width=0),
             showlegend=False,
             hoverinfo="skip",

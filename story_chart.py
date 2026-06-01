@@ -825,6 +825,36 @@ def show_story(df: pd.DataFrame, team_colors: dict, race_start_date) -> None:
 
     if fig.data:
         st.plotly_chart(fig, width="stretch")
+
+        # ── Export buttons ────────────────────────────────────────────────
+        exp_col1, exp_col2, exp_col3 = st.columns([1, 1, 4])
+        export_width  = 1800
+        export_height = 750
+
+        try:
+            import io
+
+            # SVG export
+            svg_bytes = fig.to_image(format="svg", width=export_width, height=export_height)
+            exp_col1.download_button(
+                label="⬇ Export SVG",
+                data=svg_bytes,
+                file_name=f"{headline.replace(' ', '_') or 'race_story'}.svg",
+                mime="image/svg+xml",
+                key="story_export_svg",
+            )
+
+            # High-res PNG export
+            png_bytes = fig.to_image(format="png", width=export_width, height=export_height, scale=3)
+            exp_col2.download_button(
+                label="⬇ Export PNG (3×)",
+                data=png_bytes,
+                file_name=f"{headline.replace(' ', '_') or 'race_story'}.png",
+                mime="image/png",
+                key="story_export_png",
+            )
+        except Exception as e:
+            exp_col1.caption(f"Export unavailable: {e}")
     else:
         st.info("No data to display for the selected cars and lap range.")
 

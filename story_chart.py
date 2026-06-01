@@ -826,37 +826,42 @@ def show_story(df: pd.DataFrame, team_colors: dict, race_start_date) -> None:
     if fig.data:
         st.plotly_chart(fig, width="stretch")
 
-        # ── Export buttons — inject SVG/PNG export into main page via markdown ──
-        # st.markdown with unsafe_allow_html runs in the main page context,
-        # not an iframe, so it can find the Plotly divs directly.
-        safe_name    = (headline or "race_story").replace(" ", "_").replace("/", "-")
+        # ── Export buttons ────────────────────────────────────────────────
+        # Streamlit strips <script> from st.markdown, and st.components.v1.html
+        # is deprecated. We use st.iframe (the replacement) and pass the full
+        # figure JSON into the iframe so it can render and export independently —
+        # no cross-origin DOM access needed.
+        safe_name     = (headline or "race_story").replace(" ", "_").replace("/", "-")
         export_width  = 1800
         export_height = 750
+        fig_json      = fig.to_json()
 
-        # Unique key per render to avoid stale JS state across reruns
-        import time as _time
-        _uid = str(int(_time.time() * 1000))[-6:]
-
-        st.markdown(f"""
-<div style="display:flex;gap:10px;margin:4px 0 8px 0;">
-  <button id="btn_svg_{_uid}"
-    style="background:#1f1f2e;color:#fff;border:1px solid #555;padding:6px 14px;
-           border-radius:4px;cursor:pointer;font-size:13px;">
-    ⬇ Export SVG
-  </button>
-  <button id="btn_png_{_uid}"
-    style="background:#1f1f2e;color:#fff;border:1px solid #555;padding:6px 14px;
-           border-radius:4px;cursor:pointer;font-size:13px;">
-    ⬇ Export PNG (3×)
-  </button>
+        iframe_html = f"""<!DOCTYPE html>
+<html>
+<head>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<style>
+  body {{ margin:0; background:transparent; font-family:sans-serif; }}
+  .btn {{
+    background:#1f1f2e; color:#fff; border:1px solid #555;
+    padding:6px 14px; border-radius:4px; cursor:pointer;
+    font-size:13px; margin-right:8px;
+  }}
+  .btn:hover {{ background:#2d2d45; }}
+</style>
+</head>
+<body>
+<div id="chart" style="display:none;"></div>
+<div style="padding:4px 0;">
+  <button class="btn" onclick="doExport('svg')">⬇ Export SVG</button>
+  <button class="btn" onclick="doExport('png')">⬇ Export PNG (3×)</button>
 </div>
 <script>
-(function() {{
+  var figData = {fig_json};
+  Plotly.newPlot('chart', figData.data, figData.layout, {{staticPlot: true}});
+
   function doExport(fmt) {{
-    var divs = document.querySelectorAll('.js-plotly-plot');
-    if (!divs.length) {{ alert('No chart found on page.'); return; }}
-    var div = divs[divs.length - 1];
-    Plotly.downloadImage(div, {{
+    Plotly.downloadImage('chart', {{
       format:   fmt,
       width:    {export_width},
       height:   {export_height},
@@ -864,16 +869,11 @@ def show_story(df: pd.DataFrame, team_colors: dict, race_start_date) -> None:
       filename: '{safe_name}',
     }});
   }}
-  // Attach after a short delay to ensure DOM is ready
-  setTimeout(function() {{
-    var svg_btn = document.getElementById('btn_svg_{_uid}');
-    var png_btn = document.getElementById('btn_png_{_uid}');
-    if (svg_btn) svg_btn.onclick = function() {{ doExport('svg'); }};
-    if (png_btn) png_btn.onclick = function() {{ doExport('png'); }};
-  }}, 300);
-}})();
 </script>
-""", unsafe_allow_html=True)
+</body>
+</html>"""
+
+        st.iframe(iframe_html, height=50)
     else:
         st.info("No data to display for the selected cars and lap range.")
 

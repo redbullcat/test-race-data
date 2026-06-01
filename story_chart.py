@@ -826,35 +826,51 @@ def show_story(df: pd.DataFrame, team_colors: dict, race_start_date) -> None:
     if fig.data:
         st.plotly_chart(fig, width="stretch")
 
-        # ── Export buttons ────────────────────────────────────────────────
-        exp_col1, exp_col2, exp_col3 = st.columns([1, 1, 4])
+        # ── Export buttons — browser-side, no kaleido needed ────────────
+        safe_name = (headline or "race_story").replace(" ", "_").replace("/", "-")
         export_width  = 1800
         export_height = 750
 
-        try:
-            import io
+        # Inject a small HTML snippet that uses Plotly's built-in JS export.
+        # We pass the figure JSON so the JS can reconstruct and download it.
+        import json as _json
+        fig_json = fig.to_json()
 
-            # SVG export
-            svg_bytes = fig.to_image(format="svg", width=export_width, height=export_height)
-            exp_col1.download_button(
-                label="⬇ Export SVG",
-                data=svg_bytes,
-                file_name=f"{headline.replace(' ', '_') or 'race_story'}.svg",
-                mime="image/svg+xml",
-                key="story_export_svg",
-            )
+        export_html = f"""
+<div style="display:flex;gap:10px;margin-top:4px;">
+  <button onclick="exportChart('svg')"
+    style="background:#1f1f2e;color:#fff;border:1px solid #555;padding:6px 14px;
+           border-radius:4px;cursor:pointer;font-size:13px;">
+    ⬇ Export SVG
+  </button>
+  <button onclick="exportChart('png')"
+    style="background:#1f1f2e;color:#fff;border:1px solid #555;padding:6px 14px;
+           border-radius:4px;cursor:pointer;font-size:13px;">
+    ⬇ Export PNG (3×)
+  </button>
+</div>
+<script>
+  const _figData = {fig_json};
+  const _fname   = "{safe_name}";
+  const _w = {export_width};
+  const _h = {export_height};
 
-            # High-res PNG export
-            png_bytes = fig.to_image(format="png", width=export_width, height=export_height, scale=3)
-            exp_col2.download_button(
-                label="⬇ Export PNG (3×)",
-                data=png_bytes,
-                file_name=f"{headline.replace(' ', '_') or 'race_story'}.png",
-                mime="image/png",
-                key="story_export_png",
-            )
-        except Exception as e:
-            exp_col1.caption(f"Export unavailable: {e}")
+  function exportChart(fmt) {{
+    // Find the plotly div — Streamlit renders multiple, grab the most recent
+    const divs = document.querySelectorAll('.js-plotly-plot');
+    const div  = divs[divs.length - 1];
+    if (!div) {{ alert('Chart not found — try scrolling the chart into view first.'); return; }}
+    Plotly.downloadImage(div, {{
+      format:   fmt,
+      width:    _w,
+      height:   _h,
+      scale:    fmt === 'png' ? 3 : 1,
+      filename: _fname,
+    }});
+  }}
+</script>
+"""
+        st.components.v1.html(export_html, height=50)
     else:
         st.info("No data to display for the selected cars and lap range.")
 

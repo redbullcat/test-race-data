@@ -261,13 +261,45 @@ def _annotation_editor(events: list[dict], key_prefix: str) -> list[dict]:
             current.sort(key=lambda e: e["lap"])
             st.rerun()
 
-    col_r, col_d = st.columns(2)
-    if col_r.button("↩ Reset to auto-detected", key=f"{key_prefix}_reset_btn"):
+    # ── Bulk controls ──────────────────────────────────────────────────
+    ctrl_cols = st.columns([2, 2, 2, 2])
+
+    if ctrl_cols[0].button("↩ Reset to auto-detected", key=f"{key_prefix}_reset_btn"):
         st.session_state[f"{key_prefix}_reset"] = True
         st.rerun()
-    if col_d.button("🗑 Delete all annotations", key=f"{key_prefix}_delete_all"):
+    if ctrl_cols[1].button("🗑 Delete all", key=f"{key_prefix}_delete_all"):
         st.session_state["story_events"] = []
         st.rerun()
+
+    # Remove by car
+    all_cars_in_events = sorted({e["car"] for e in current if e["car"] != "All"})
+    if all_cars_in_events:
+        car_to_remove = ctrl_cols[2].selectbox(
+            "Remove car:", ["—"] + all_cars_in_events,
+            key=f"{key_prefix}_remove_car"
+        )
+        if car_to_remove != "—":
+            if ctrl_cols[2].button(f"Remove #{car_to_remove}", key=f"{key_prefix}_do_remove_car"):
+                st.session_state["story_events"] = [
+                    e for e in current if e["car"] != car_to_remove
+                ]
+                st.rerun()
+
+    # Remove by category
+    all_cats = sorted({e.get("category","Custom") for e in current})
+    if all_cats:
+        cat_to_remove = ctrl_cols[3].selectbox(
+            "Remove category:", ["—"] + all_cats,
+            key=f"{key_prefix}_remove_cat"
+        )
+        if cat_to_remove != "—":
+            if ctrl_cols[3].button(f"Remove {cat_to_remove}", key=f"{key_prefix}_do_remove_cat"):
+                st.session_state["story_events"] = [
+                    e for e in current if e.get("category","Custom") != cat_to_remove
+                ]
+                st.rerun()
+
+    st.divider()
 
     # Editable rows
     to_delete = []
@@ -587,8 +619,8 @@ def show_story(df: pd.DataFrame, team_colors: dict, race_start_date) -> None:
         if race_start_date is None:
             st.warning("Gap evolution requires a race start date in the filename.")
             return
-        if "ELAPSED_SECONDS" not in class_df.columns or "HOUR" not in class_df.columns:
-            st.warning("Gap evolution requires ELAPSED and HOUR columns.")
+        if "ELAPSED_SECONDS" not in class_df.columns:
+            st.warning("Gap evolution requires ELAPSED_SECONDS column.")
             return
         ref_car = st.selectbox(
             "Reference car (gap measured from this car):",
@@ -628,6 +660,27 @@ def show_story(df: pd.DataFrame, team_colors: dict, race_start_date) -> None:
         st.session_state["story_events"] = [e.copy() for e in auto_events]
         st.session_state[cars_key] = tuple(sorted(selected_cars))
 
+    # ── Annotation filter controls ───────────────────────────────────────
+    ann_col1, ann_col2, ann_col3 = st.columns([2, 2, 2])
+    max_annotations = ann_col1.slider(
+        "Max annotations to show:", 0, 50, 20, key="story_max_ann",
+        help="Limits auto-detected annotations per chart. Custom annotations are always shown."
+    )
+    all_cats = list(ANNOTATION_COLOURS.keys())
+    hidden_cats = ann_col2.multiselect(
+        "Hide categories:", all_cats, default=[], key="story_hidden_cats",
+        help="Hide entire annotation categories without deleting them."
+    )
+
+    # Apply category filter and max_annotations limit to auto events
+    # Custom annotations (added by user) always bypass the max limit
+    auto_filtered = [e for e in auto_events if e.get("category","Custom") not in hidden_cats]
+    # Prioritise: lead changes > caution > pit stops > driver changes
+    priority = {"Lead change": 0, "Caution / SC": 1, "Pit stop": 2, "Driver change": 3, "Custom": 4}
+    auto_filtered.sort(key=lambda e: (priority.get(e.get("category","Custom"), 4), e["lap"]))
+    auto_filtered = auto_filtered[:max_annotations]
+    auto_filtered.sort(key=lambda e: e["lap"])
+
     # ── Annotation editor ────────────────────────────────────────────────
     with st.expander("📝 Edit annotations", expanded=False):
         st.caption(
@@ -641,17 +694,17 @@ def show_story(df: pd.DataFrame, team_colors: dict, race_start_date) -> None:
         h[2].caption("Text")
         h[3].caption("Category")
         h[4].caption("")
-        events = _annotation_editor(auto_events, key_prefix="story")
+        events = _annotation_editor(auto_filtered, key_prefix="story")
 
     # Use whatever is current in session state (edited or auto)
-    events = st.session_state.get("story_events", auto_events)
+    events = st.session_state.get("story_events", auto_filtered)
 
     # ── Build and display chart ──────────────────────────────────────────
     filtered_class_df = class_df[class_df["NUMBER"].isin(selected_cars)].copy()
 
     if chart_type == "Gap evolution (filled area)":
         fig = _build_gap_story(
-            df=filtered_class_df,
+            df=class_df,  # pass full class df so ref car always has data
             selected_cars=selected_cars,
             ref_car=ref_car,
             team_colors=team_colors,

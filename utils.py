@@ -15,7 +15,6 @@ from datetime import datetime, timedelta
 
 import pandas as pd
 import streamlit as st
-import streamlit.components.v1 as _st_components
 
 
 # ---------------------------------------------------------------------------
@@ -224,13 +223,13 @@ def chart_export_buttons(
     Render SVG and high-res PNG export buttons beneath a Plotly figure.
     Pass `fig` for Plotly figures, `df` for DataFrames.
 
-    Uses an st.iframe that renders the figure and calls Plotly.downloadImage —
-    no kaleido required, works on Streamlit Cloud.
+    Uses st.iframe (replaces deprecated st.components.v1.html) to render the
+    figure and trigger Plotly.downloadImage — no kaleido required.
 
-    For DataFrames: exports as CSV (since there's no Plotly figure to export).
+    For DataFrames: exports as CSV.
     If both fig and df are provided, Plotly export is used.
     """
-    import streamlit as st
+    import hashlib
 
     safe_name = filename.replace(" ", "_").replace("/", "-")
 
@@ -271,15 +270,20 @@ def chart_export_buttons(
 </script>
 </body>
 </html>"""
-        _st_components.html(iframe_html, height=38)
+        st.iframe(iframe_html, height=38)
 
     elif df is not None:
-        # DataFrame export as CSV
+        # DataFrame export as CSV.
+        # Key must be unique across all calls on the page, including when the
+        # same filename is used multiple times in a loop (e.g. per-class dfs).
+        # Use a hash of the CSV content so identical calls stay stable across
+        # reruns but differ when content differs.
         csv = df.to_csv(index=False)
+        content_hash = hashlib.md5(csv.encode()).hexdigest()[:8]
         st.download_button(
             label="⬇ Download CSV",
             data=csv,
             file_name=f"{safe_name}.csv",
             mime="text/csv",
-            key=f"_csv_export_{safe_name}_{id(df)}",
+            key=f"_csv_{safe_name}_{content_hash}",
         )

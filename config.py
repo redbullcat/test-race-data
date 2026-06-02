@@ -50,6 +50,8 @@ TEAM_COLORS: dict[str, str] = {
     "Porsche Penske Motorsport": "#d3d3d3",
     "Alpine Endurance Team": "#2673e2",
     "Aston Martin Thor Team": "#01655c",
+    "Toyota Racing": "#D42D25",
+    "Genesis Magma Racing": "#EF732F",
     # WEC LMGT3
     "AF Corse": "#FCE903",
     "Proton Competition": "#fcfcff",
@@ -62,9 +64,6 @@ TEAM_COLORS: dict[str, str] = {
     "Racing Spirit of Leman": "#428ca8",
     "Iron Lynx": "#fefe00",
     "TF Sport": "#eaaa1d",
-    # GTWC Europe
-    "Toyota Racing": "#D42D25",
-    "Genesis Magma Racing": "#EF732F",
     # IMSA
     "Cadillac Wayne Taylor Racing": "#0E3463",
     "JDC-Miller MotorSports": "#F8D94A",

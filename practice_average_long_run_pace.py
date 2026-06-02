@@ -1,6 +1,6 @@
 import pandas as pd
 import streamlit as st
-from utils import lap_to_seconds, sort_cars
+from utils import lap_to_seconds, sort_cars, chart_export_buttons
 import plotly.express as px
 
 def show_practice_average_long_run_pace(df, team_colors, key_prefix="prac"):
@@ -162,6 +162,7 @@ def show_practice_average_long_run_pace(df, team_colors, key_prefix="prac"):
     )
 
     st.plotly_chart(fig, width='stretch')
+    chart_export_buttons(fig=fig, filename="practice_avg_long_run", height=500)
 
     # Summary table with overall average lap time per car (filtered laps only)
     summary = (
@@ -175,6 +176,7 @@ def show_practice_average_long_run_pace(df, team_colors, key_prefix="prac"):
 
     st.markdown("### Summary Table")
     st.dataframe(summary.style.format({"Average Lap Time (s)": "{:.3f}"}))
+    chart_export_buttons(df=summary, filename="avg_long_run_pace")
 
 
 if __name__ == "__main__":

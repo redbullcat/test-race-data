@@ -1,5 +1,6 @@
 import pandas as pd
 import streamlit as st
+from utils import chart_export_buttons
 
 def parse_lap_time(lap_time_str):
     if pd.isna(lap_time_str):
@@ -178,3 +179,4 @@ def show_practice_fastest_laps(df: pd.DataFrame):
     })
 
     st.dataframe(display_df, width="stretch", hide_index=True)
+    chart_export_buttons(df=display_df, filename="practice_fastest_laps")

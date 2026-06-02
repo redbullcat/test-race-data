@@ -12,7 +12,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from utils import apply_dark_layout, build_color_map, sort_cars
+from utils import apply_dark_layout, build_color_map, sort_cars, chart_export_buttons
 
 
 def _identify_stints(car_df: pd.DataFrame) -> pd.Series:
@@ -151,6 +151,7 @@ def show_tyre_deg_chart(df: pd.DataFrame, team_colors: dict) -> None:
     )
     apply_dark_layout(fig, title_font=dict(size=22))
     st.plotly_chart(fig, width="stretch")
+    chart_export_buttons(fig=fig, filename="tyre_deg_chart", height=500)
 
     # Stint detail table
     with st.expander("Stint detail", expanded=False):
@@ -158,3 +159,4 @@ def show_tyre_deg_chart(df: pd.DataFrame, team_colors: dict) -> None:
         display = display[display["NUMBER"].isin(car_agg["NUMBER"])]
         display = display.sort_values(["NUMBER", "Stint"])
         st.dataframe(display, hide_index=True, width="stretch")
+        chart_export_buttons(df=display, filename="tyre_deg_stint_detail")

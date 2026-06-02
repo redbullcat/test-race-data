@@ -5,6 +5,7 @@ import re
 
 import pandas as pd
 import streamlit as st
+from utils import chart_export_buttons
 
 try:
     import pdfplumber
@@ -131,6 +132,7 @@ def show_tyre_analysis(year: str = None, series: str = None, race: str = None):
         df = df[(df["Driver Out"] == selected_driver) | (df["Driver In"] == selected_driver)]
 
     st.dataframe(df, width='stretch')
+    chart_export_buttons(df=df, filename="tyre_analysis")
 
     if os.path.exists(csv_path):
         with open(csv_path, "rb") as f:

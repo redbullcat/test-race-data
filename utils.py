@@ -15,6 +15,7 @@ from datetime import datetime, timedelta
 
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as _st_components
 
 
 # ---------------------------------------------------------------------------
@@ -206,3 +207,79 @@ def apply_dark_layout(fig, **overrides):
     layout = {**DARK_LAYOUT, **overrides}
     fig.update_layout(**layout)
     return fig
+
+
+# ---------------------------------------------------------------------------
+# Export helper — SVG and high-res PNG for Plotly figures and DataFrames
+# ---------------------------------------------------------------------------
+
+def chart_export_buttons(
+    fig=None,
+    df=None,
+    filename: str = "chart",
+    width: int = 1800,
+    height: int = 600,
+) -> None:
+    """
+    Render SVG and high-res PNG export buttons beneath a Plotly figure.
+    Pass `fig` for Plotly figures, `df` for DataFrames.
+
+    Uses an st.iframe that renders the figure and calls Plotly.downloadImage —
+    no kaleido required, works on Streamlit Cloud.
+
+    For DataFrames: exports as CSV (since there's no Plotly figure to export).
+    If both fig and df are provided, Plotly export is used.
+    """
+    import streamlit as st
+
+    safe_name = filename.replace(" ", "_").replace("/", "-")
+
+    if fig is not None:
+        fig_json = fig.to_json()
+        iframe_html = f"""<!DOCTYPE html>
+<html>
+<head>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<style>
+  body {{ margin:0; background:transparent; font-family:sans-serif; }}
+  .btn {{
+    background:#1f1f2e; color:#fff; border:1px solid #555;
+    padding:5px 12px; border-radius:4px; cursor:pointer;
+    font-size:12px; margin-right:6px;
+  }}
+  .btn:hover {{ background:#2d2d45; }}
+</style>
+</head>
+<body>
+<div id="chart" style="display:none;"></div>
+<div style="padding:3px 0;">
+  <button class="btn" onclick="doExport('svg')">⬇ SVG</button>
+  <button class="btn" onclick="doExport('png')">⬇ PNG (3×)</button>
+</div>
+<script>
+  var figData = {fig_json};
+  Plotly.newPlot('chart', figData.data, figData.layout, {{staticPlot: true}});
+  function doExport(fmt) {{
+    Plotly.downloadImage('chart', {{
+      format:   fmt,
+      width:    {width},
+      height:   {height},
+      scale:    fmt === 'png' ? 3 : 1,
+      filename: '{safe_name}',
+    }});
+  }}
+</script>
+</body>
+</html>"""
+        _st_components.html(iframe_html, height=38)
+
+    elif df is not None:
+        # DataFrame export as CSV
+        csv = df.to_csv(index=False)
+        st.download_button(
+            label="⬇ Download CSV",
+            data=csv,
+            file_name=f"{safe_name}.csv",
+            mime="text/csv",
+            key=f"_csv_export_{safe_name}_{id(df)}",
+        )

@@ -12,7 +12,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from utils import apply_dark_layout, build_color_map, sort_cars
+from utils import apply_dark_layout, build_color_map, sort_cars, chart_export_buttons
 
 
 @st.cache_data(show_spinner=False)
@@ -158,6 +158,7 @@ def show_pit_delta_chart(df: pd.DataFrame, team_colors: dict) -> None:
         )
         apply_dark_layout(fig, title_font=dict(size=18))
         st.plotly_chart(fig, width="stretch")
+        chart_export_buttons(fig=fig, filename="pit_delta_chart", height=500)
 
     with col2:
         # Individual stop scatter
@@ -194,7 +195,9 @@ def show_pit_delta_chart(df: pd.DataFrame, team_colors: dict) -> None:
         )
         apply_dark_layout(fig2, title_font=dict(size=18))
         st.plotly_chart(fig2, width="stretch")
+        chart_export_buttons(fig=fig2, filename="pit_delta_scatter", height=500)
 
     with st.expander("Full pit stop detail", expanded=False):
         display = pit_df[["NUMBER", "TEAM", "Pit Lap", "In-Lap (s)", "Out-Lap (s)", "Baseline (s)", "Pit Loss (s)"]]
         st.dataframe(display.sort_values(["NUMBER", "Pit Lap"]), hide_index=True, width="stretch")
+        chart_export_buttons(df=display, filename="pit_stop_data")

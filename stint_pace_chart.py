@@ -3,7 +3,7 @@
 import plotly.express as px
 import streamlit as st
 
-from utils import get_team_color, apply_dark_layout, sort_cars
+from utils import get_team_color, apply_dark_layout, sort_cars, chart_export_buttons
 
 
 @st.cache_data(show_spinner=False)
@@ -92,3 +92,4 @@ def show_stint_pace_chart(df, team_colors):
             fig.update_layout(yaxis=dict(range=[y_min, y_max]), xaxis=dict(dtick=1))
             apply_dark_layout(fig, title_font=dict(size=22))
             st.plotly_chart(fig, width='stretch')
+            chart_export_buttons(fig=fig, filename="stint_pace_chart", height=500)

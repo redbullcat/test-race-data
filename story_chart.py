@@ -26,6 +26,7 @@ import streamlit as st
 from utils import (
     apply_dark_layout,
     build_color_map,
+    chart_export_buttons,
     parse_hour_with_rollover,
     sort_cars,
     seconds_to_laptime,
@@ -382,11 +383,12 @@ def _add_flag_bands(fig, df: pd.DataFrame, lap_min: int, lap_max: int) -> None:
 
 
 def _add_annotations(fig, events: list[dict], y_ref: str = "paper",
-                      y_frac: float = 0.95) -> None:
+                      y_frac: float = 0.95, show_vlines: bool = True) -> None:
     """
-    Add vertical lines + text labels for each visible annotation.
+    Add optional vertical lines + text labels for each visible annotation.
     Y position comes from evt["y_pos"] (0–1 paper coords, set by user).
     Falls back to auto-spread from y_frac if not set.
+    show_vlines controls whether dotted vertical lines are drawn.
     """
     visible = [e for e in events if e.get("visible")]
     # Track which laps already have a vline to avoid duplicates
@@ -398,7 +400,7 @@ def _add_annotations(fig, events: list[dict], y_ref: str = "paper",
         y_pos = evt.get("y_pos", round(y_frac - (i % 8) * 0.10, 2))
 
         # Vertical line — one per lap regardless of how many annotations share it
-        if lap not in vlines_added:
+        if show_vlines and lap not in vlines_added:
             fig.add_vline(
                 x=lap,
                 line_color=color,
@@ -487,6 +489,7 @@ def _build_gap_story(
     logo_position: str = "Bottom right",
     logo_size: float = 0.18,
     logo_opacity: float = 0.6,
+    show_vlines: bool = True,
 ) -> go.Figure:
     merged = _compute_gaps(df, ref_car)
     merged = merged[
@@ -554,9 +557,12 @@ def _build_gap_story(
             hovertemplate=f"#{car} — {team}<br>Lap %{{x}}<br>Gap: %{{y:.1f}}s<extra></extra>",
         ))
 
-    _add_annotations(fig, events)
+    _add_annotations(fig, events, show_vlines=show_vlines)
 
-    title_text = f"<b>{headline}</b><br><sub>{subtitle}</sub>" if subtitle else f"<b>{headline}</b>"
+    # Wrap subtitle to ~80 chars so long descriptions don't overflow the chart
+    import textwrap as _tw
+    wrapped_subtitle = "<br>".join(_tw.wrap(subtitle, width=90)) if subtitle else ""
+    title_text = f"<b>{headline}</b><br><sub>{wrapped_subtitle}</sub>" if wrapped_subtitle else f"<b>{headline}</b>"
     fig.update_layout(
         title=dict(text=title_text, font=dict(size=20)),
         xaxis_title="Lap Number",
@@ -566,6 +572,7 @@ def _build_gap_story(
         height=550,
     )
     apply_dark_layout(fig)
+    _add_logo_to_fig(fig, logo_path, show_logo, logo_position, logo_size, logo_opacity)
     return fig
 
 
@@ -586,6 +593,7 @@ def _build_position_story(
     logo_position: str = "Bottom right",
     logo_size: float = 0.18,
     logo_opacity: float = 0.6,
+    show_vlines: bool = True,
 ) -> go.Figure:
     pos_df = _compute_positions(df)
     if pos_df.empty:
@@ -618,9 +626,12 @@ def _build_position_story(
             hovertemplate=f"#{car} — {team}<br>Lap %{{x}}<br>P%{{y}}<extra></extra>",
         ))
 
-    _add_annotations(fig, events, y_ref="paper", y_frac=0.05)
+    _add_annotations(fig, events, y_ref="paper", y_frac=0.05, show_vlines=show_vlines)
 
-    title_text = f"<b>{headline}</b><br><sub>{subtitle}</sub>" if subtitle else f"<b>{headline}</b>"
+    # Wrap subtitle to ~80 chars so long descriptions don't overflow the chart
+    import textwrap as _tw
+    wrapped_subtitle = "<br>".join(_tw.wrap(subtitle, width=90)) if subtitle else ""
+    title_text = f"<b>{headline}</b><br><sub>{wrapped_subtitle}</sub>" if wrapped_subtitle else f"<b>{headline}</b>"
     fig.update_layout(
         title=dict(text=title_text, font=dict(size=20)),
         xaxis_title="Lap",
@@ -713,8 +724,9 @@ def show_story(df: pd.DataFrame, team_colors: dict, race_start_date) -> None:
 
     # ── Logo ─────────────────────────────────────────────────────────────
     import os as _os
-    logo_col1, logo_col2, logo_col3, logo_col4 = st.columns([1, 1, 1, 1])
+    logo_col1, logo_col2, logo_col3, logo_col4, logo_col5 = st.columns([1, 1, 1, 1, 1])
     show_logo = logo_col1.checkbox("Show logo", value=False, key="story_show_logo")
+    show_vlines = logo_col5.checkbox("Show annotation lines", value=True, key="story_show_vlines")
     logo_position = logo_col2.selectbox(
         "Logo position", ["Bottom right", "Bottom left", "Top right", "Top left"],
         key="story_logo_pos"
@@ -806,6 +818,7 @@ def show_story(df: pd.DataFrame, team_colors: dict, race_start_date) -> None:
             logo_position=logo_position,
             logo_size=logo_size,
             logo_opacity=logo_opacity,
+            show_vlines=show_vlines,
         )
     else:
         fig = _build_position_story(
@@ -821,59 +834,13 @@ def show_story(df: pd.DataFrame, team_colors: dict, race_start_date) -> None:
             logo_position=logo_position,
             logo_size=logo_size,
             logo_opacity=logo_opacity,
+            show_vlines=show_vlines,
         )
 
     if fig.data:
         st.plotly_chart(fig, width="stretch")
-
-        # ── Export buttons ────────────────────────────────────────────────
-        # Streamlit strips <script> from st.markdown, and st.components.v1.html
-        # is deprecated. We use st.iframe (the replacement) and pass the full
-        # figure JSON into the iframe so it can render and export independently —
-        # no cross-origin DOM access needed.
-        safe_name     = (headline or "race_story").replace(" ", "_").replace("/", "-")
-        export_width  = 1800
-        export_height = 750
-        fig_json      = fig.to_json()
-
-        iframe_html = f"""<!DOCTYPE html>
-<html>
-<head>
-<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
-<style>
-  body {{ margin:0; background:transparent; font-family:sans-serif; }}
-  .btn {{
-    background:#1f1f2e; color:#fff; border:1px solid #555;
-    padding:6px 14px; border-radius:4px; cursor:pointer;
-    font-size:13px; margin-right:8px;
-  }}
-  .btn:hover {{ background:#2d2d45; }}
-</style>
-</head>
-<body>
-<div id="chart" style="display:none;"></div>
-<div style="padding:4px 0;">
-  <button class="btn" onclick="doExport('svg')">⬇ Export SVG</button>
-  <button class="btn" onclick="doExport('png')">⬇ Export PNG (3×)</button>
-</div>
-<script>
-  var figData = {fig_json};
-  Plotly.newPlot('chart', figData.data, figData.layout, {{staticPlot: true}});
-
-  function doExport(fmt) {{
-    Plotly.downloadImage('chart', {{
-      format:   fmt,
-      width:    {export_width},
-      height:   {export_height},
-      scale:    fmt === 'png' ? 3 : 1,
-      filename: '{safe_name}',
-    }});
-  }}
-</script>
-</body>
-</html>"""
-
-        st.iframe(iframe_html, height=50)
+        safe_name = (headline or "race_story").replace(" ", "_").replace("/", "-")
+        chart_export_buttons(fig=fig, filename=safe_name, height=750)
     else:
         st.info("No data to display for the selected cars and lap range.")
 

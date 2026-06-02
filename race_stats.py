@@ -5,7 +5,7 @@ from datetime import datetime
 import pandas as pd
 import streamlit as st
 
-from utils import parse_hour_with_rollover, laps_to_ranges
+from utils import parse_hour_with_rollover, laps_to_ranges, chart_export_buttons
 
 
 @st.cache_data(show_spinner=False)
@@ -125,13 +125,15 @@ def show_race_stats(df, race_start_date):
             car_stats = car_stats.sort_values("laps_led", ascending=False)
 
             st.markdown("**By car**")
-            st.dataframe(
-                car_stats.rename(columns={"NUMBER": "Car", "laps_led": "Laps Led", "laps_range": "Lap Ranges", "% led": "% of Race"})[
+            _car_stats_display = car_stats.rename(columns={"NUMBER": "Car", "laps_led": "Laps Led", "laps_range": "Lap Ranges", "% led": "% of Race"})[
                     ["Car", "Laps Led", "Lap Ranges", "% of Race"]
-                ],
+                ]
+            st.dataframe(
+                _car_stats_display,
                 width='stretch',
                 hide_index=True,
             )
+            chart_export_buttons(df=_car_stats_display, filename="laps_led_by_car")
 
             driver_stats = (
                 cdf.groupby(["CAR_ID", "NUMBER", "DRIVER_NAME"])
@@ -142,10 +144,12 @@ def show_race_stats(df, race_start_date):
             driver_stats = driver_stats.sort_values("laps_led", ascending=False)
 
             st.markdown("**By driver**")
-            st.dataframe(
-                driver_stats.rename(columns={"NUMBER": "Car", "DRIVER_NAME": "Driver", "laps_led": "Laps Led", "laps_range": "Lap Ranges", "% led": "% of Race"})[
+            _driver_stats_display = driver_stats.rename(columns={"NUMBER": "Car", "DRIVER_NAME": "Driver", "laps_led": "Laps Led", "laps_range": "Lap Ranges", "% led": "% of Race"})[
                     ["Car", "Driver", "Laps Led", "Lap Ranges", "% of Race"]
-                ],
+                ]
+            st.dataframe(
+                _driver_stats_display,
                 width='stretch',
                 hide_index=True,
             )
+            chart_export_buttons(df=_driver_stats_display, filename="laps_led_by_driver")

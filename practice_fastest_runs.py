@@ -1,7 +1,7 @@
 import pandas as pd
 import plotly.express as px
 import streamlit as st
-from utils import lap_to_seconds, sort_cars
+from utils import lap_to_seconds, sort_cars, chart_export_buttons
 
 def show_practice_fastest_runs(df, team_colors, key_prefix="prac"):
     st.subheader("Fastest Run Average Pace by Car")
@@ -182,6 +182,7 @@ def show_practice_fastest_runs(df, team_colors, key_prefix="prac"):
     )
 
     st.plotly_chart(fig, width='stretch')
+    chart_export_buttons(fig=fig, filename="practice_fastest_runs", height=500)
 
     # --- Prepare and show detailed tables per class ---
     def format_lap_time(seconds):
@@ -211,3 +212,4 @@ def show_practice_fastest_runs(df, team_colors, key_prefix="prac"):
             columns={"Stint_Length": "Stint Length (laps)"}
         )
         st.dataframe(class_df, width='stretch')
+        chart_export_buttons(df=class_df, filename="practice_fastest_runs_data")

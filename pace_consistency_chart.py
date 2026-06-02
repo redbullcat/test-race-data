@@ -12,7 +12,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from utils import apply_dark_layout, build_color_map, seconds_to_laptime
+from utils import apply_dark_layout, build_color_map, seconds_to_laptime, chart_export_buttons
 
 
 @st.cache_data(show_spinner=False)
@@ -138,3 +138,4 @@ def show_pace_consistency_chart(df: pd.DataFrame, team_colors: dict) -> None:
     )
     apply_dark_layout(fig, title_font=dict(size=22))
     st.plotly_chart(fig, width="stretch")
+    chart_export_buttons(fig=fig, filename="pace_consistency_chart", height=500)

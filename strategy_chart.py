@@ -11,7 +11,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from utils import apply_dark_layout, build_color_map, sort_cars
+from utils import apply_dark_layout, build_color_map, sort_cars, chart_export_buttons
 
 
 @st.cache_data(show_spinner=False)
@@ -161,6 +161,7 @@ def show_strategy_chart(df: pd.DataFrame, team_colors: dict) -> None:
     )
     apply_dark_layout(fig, title_font=dict(size=22))
     st.plotly_chart(fig, width="stretch")
+    chart_export_buttons(fig=fig, filename="strategy_chart", height=600)
 
     # Pit count summary
     pit_counts = (
@@ -174,7 +175,9 @@ def show_strategy_chart(df: pd.DataFrame, team_colors: dict) -> None:
     pit_counts = pit_counts.sort_values("Pit Stops", ascending=False)
 
     with st.expander("Pit stop count summary", expanded=False):
+        _pit_display = pit_counts[["Label", "Pit Stops"]].rename(columns={"Label": "Car"})
         st.dataframe(
-            pit_counts[["Label", "Pit Stops"]].rename(columns={"Label": "Car"}),
+            _pit_display,
             hide_index=True, width="stretch"
         )
+        chart_export_buttons(df=_pit_display, filename="pit_stop_counts")

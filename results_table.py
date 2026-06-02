@@ -3,7 +3,7 @@
 import pandas as pd
 import streamlit as st
 
-from utils import seconds_to_laptime, lap_to_seconds
+from utils import seconds_to_laptime, lap_to_seconds, chart_export_buttons
 
 
 @st.cache_data(show_spinner=False)
@@ -108,3 +108,4 @@ def show_results_table(df, team_colors):
     display_df = display_df.set_index("Pos")
 
     st.dataframe(display_df, width='stretch')
+    chart_export_buttons(df=display_df, filename="race_results")

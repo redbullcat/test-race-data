@@ -2,7 +2,7 @@ import math
 import pandas as pd
 import plotly.express as px
 import streamlit as st
-from utils import sort_cars
+from utils import sort_cars, chart_export_buttons
 
 
 def parse_hour_time(series: pd.Series) -> pd.Series:
@@ -187,3 +187,4 @@ def show_practice_team_run_analysis(df, team_colors, key_prefix="prac"):
         )
 
         st.plotly_chart(fig, width='stretch')
+        chart_export_buttons(fig=fig, filename="practice_team_run_analysis", height=500)

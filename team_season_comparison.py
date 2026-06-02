@@ -4,7 +4,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from data_loader import load_season_races
-from utils import get_team_color, apply_dark_layout
+from utils import get_team_color, apply_dark_layout, chart_export_buttons
 
 
 def show_team_season_comparison(df, team_colors, year: str, series: str):
@@ -107,6 +107,7 @@ def show_team_season_comparison(df, team_colors, year: str, series: str):
             )
             apply_dark_layout(fig)
             st.plotly_chart(fig, width='stretch')
+            chart_export_buttons(fig=fig, filename="team_season_comparison", height=500)
 
     # Season summary
     if not summary_records:
@@ -152,3 +153,4 @@ def show_team_season_comparison(df, team_colors, year: str, series: str):
         )
         apply_dark_layout(fig)
         st.plotly_chart(fig, width='stretch')
+        chart_export_buttons(fig=fig, filename='team_season_avg_pace', height=500)

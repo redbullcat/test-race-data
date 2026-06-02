@@ -3,7 +3,7 @@
 import plotly.express as px
 import streamlit as st
 
-from utils import get_team_color, filter_top_percent, apply_dark_layout
+from utils import get_team_color, filter_top_percent, apply_dark_layout, chart_export_buttons
 
 
 def show_team_driver_pace_comparison(df, team_colors):
@@ -53,4 +53,5 @@ def show_team_driver_pace_comparison(df, team_colors):
                 )
                 apply_dark_layout(fig)
                 st.plotly_chart(fig, width='stretch')
+                chart_export_buttons(fig=fig, filename="team_driver_pace", height=500)
                 st.divider()

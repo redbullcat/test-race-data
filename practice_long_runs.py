@@ -1,6 +1,7 @@
 import pandas as pd
 import plotly.express as px
 import streamlit as st
+from utils import chart_export_buttons
 
 def show_practice_long_runs(longest_stints_df, team_colors, key_prefix="prac"):
     st.subheader("Longest Run Pace by Car (Lap-by-Lap)")
@@ -85,6 +86,7 @@ def show_practice_long_runs(longest_stints_df, team_colors, key_prefix="prac"):
     )
 
     st.plotly_chart(fig, width='stretch')
+    chart_export_buttons(fig=fig, filename="practice_long_runs", height=500)
 
     # --- Debug: Show raw data table below the chart ---
     st.markdown("#### Raw Data for Longest Stints")

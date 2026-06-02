@@ -3,7 +3,7 @@
 import plotly.express as px
 import streamlit as st
 
-from utils import filter_top_percent, build_color_map, apply_dark_layout, sort_cars
+from utils import filter_top_percent, build_color_map, apply_dark_layout, sort_cars, chart_export_buttons
 
 
 def show_pace_chart(df, team_colors):
@@ -79,3 +79,4 @@ def show_pace_chart(df, team_colors):
                              avg_df["LAP_TIME_SECONDS"].max() + x_pad])
     apply_dark_layout(fig, title_font=dict(size=22))
     st.plotly_chart(fig, width='stretch')
+    chart_export_buttons(fig=fig, filename="pace_chart", height=500)

@@ -11,7 +11,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from utils import apply_dark_layout, sort_cars, seconds_to_laptime
+from utils import apply_dark_layout, sort_cars, seconds_to_laptime, chart_export_buttons
 
 
 @st.cache_data(show_spinner=False)
@@ -126,6 +126,7 @@ def show_driver_stint_chart(df: pd.DataFrame, team_colors: dict) -> None:
             ])
         apply_dark_layout(fig, showlegend=False)
         st.plotly_chart(fig, width="stretch")
+        chart_export_buttons(fig=fig, filename="driver_stint_chart", height=500)
 
     with col2:
         st.markdown("**Consistency (Std Dev) by Driver**")
@@ -143,6 +144,7 @@ def show_driver_stint_chart(df: pd.DataFrame, team_colors: dict) -> None:
             ))
         apply_dark_layout(fig2, showlegend=False)
         st.plotly_chart(fig2, width="stretch")
+        chart_export_buttons(fig=fig2, filename="driver_stint_consistency", height=500)
 
     # Stint-by-stint pace trace
     st.markdown("**Pace Trace by Stint**")
@@ -181,3 +183,4 @@ def show_driver_stint_chart(df: pd.DataFrame, team_colors: dict) -> None:
     )
     apply_dark_layout(fig3)
     st.plotly_chart(fig3, width="stretch")
+    chart_export_buttons(fig=fig3, filename="driver_lap_trace", height=500)

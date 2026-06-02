@@ -3,7 +3,7 @@
 import plotly.graph_objects as go
 import streamlit as st
 
-from utils import apply_dark_layout
+from utils import apply_dark_layout, chart_export_buttons
 
 
 @st.cache_data(show_spinner=False)
@@ -85,3 +85,4 @@ def show_driver_pace_comparison(df, team_colors):
     )
     apply_dark_layout(fig)
     st.plotly_chart(fig, width='stretch')
+    chart_export_buttons(fig=fig, filename="driver_pace_comparison", height=500)

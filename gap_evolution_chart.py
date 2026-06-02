@@ -5,7 +5,7 @@ from datetime import datetime
 import plotly.graph_objects as go
 import streamlit as st
 
-from utils import parse_hour_with_rollover, build_color_map, apply_dark_layout, sort_cars
+from utils import parse_hour_with_rollover, build_color_map, apply_dark_layout, sort_cars, chart_export_buttons
 
 
 def get_filtered_race_data(df, race_start_date):
@@ -89,6 +89,7 @@ def show_gap_evolution_chart(filtered_df, team_colors, selected_class, selected_
     )
     apply_dark_layout(fig)
     st.plotly_chart(fig, width='stretch')
+    chart_export_buttons(fig=fig, filename="gap_evolution_chart", height=500)
 
 
 def show_cumulative_time_chart(filtered_df, team_colors, selected_class, selected_cars):
@@ -122,3 +123,4 @@ def show_cumulative_time_chart(filtered_df, team_colors, selected_class, selecte
     )
     apply_dark_layout(fig)
     st.plotly_chart(fig, width='stretch')
+    chart_export_buttons(fig=fig, filename="gap_evolution_button", height=500)

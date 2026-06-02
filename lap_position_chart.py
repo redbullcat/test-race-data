@@ -4,7 +4,7 @@ import plotly.graph_objects as go
 import pandas as pd
 import streamlit as st
 
-from utils import get_team_color, apply_dark_layout, sort_cars
+from utils import get_team_color, apply_dark_layout, sort_cars, chart_export_buttons
 
 
 def show_lap_position_chart(df, team_colors):
@@ -102,3 +102,4 @@ def show_lap_position_chart(df, team_colors):
             )
             apply_dark_layout(fig)
             st.plotly_chart(fig, width='stretch')
+            chart_export_buttons(fig=fig, filename="lap_position_chart", height=500)

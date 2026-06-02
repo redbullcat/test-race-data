@@ -67,15 +67,17 @@ def show_lap_position_chart(df, team_colors):
 
             # Assign dash style: cars sharing a colour get solid / dash / dot
             # in ascending numeric order so the assignment is deterministic.
-            DASH_STYLES = ["solid", "dash", "dot"]
+            DASH_STYLES   = ["solid", "dash",   "dot"]
+            MARKER_SHAPES = ["circle", "square", "diamond"]
             color_to_cars: dict[str, list] = {}
             for car in sort_cars(selected_cars):
                 col = car_colors.get(car, "#888888")
                 color_to_cars.setdefault(col, []).append(car)
-            car_dash: dict[str, str] = {}
+            car_style: dict[str, tuple] = {}  # car → (dash, marker_symbol)
             for col, cars_same_color in color_to_cars.items():
                 for i, car in enumerate(cars_same_color):
-                    car_dash[car] = DASH_STYLES[min(i, len(DASH_STYLES) - 1)]
+                    idx = min(i, len(DASH_STYLES) - 1)
+                    car_style[car] = (DASH_STYLES[idx], MARKER_SHAPES[idx])
 
             fig = go.Figure()
             for car in selected_cars:
@@ -92,6 +94,7 @@ def show_lap_position_chart(df, team_colors):
                 if not any(p is not None for p in positions):
                     continue
 
+                dash, marker_symbol = car_style.get(car, ("solid", "circle"))
                 fig.add_trace(go.Scatter(
                     x=laps,
                     y=positions,
@@ -101,8 +104,9 @@ def show_lap_position_chart(df, team_colors):
                     line=dict(
                         color=car_colors.get(car, "#888888"),
                         width=2,
-                        dash=car_dash.get(car, "solid"),
+                        dash=dash,
                     ),
+                    marker=dict(symbol=marker_symbol),
                     connectgaps=False,
                     hovertemplate="Lap %{x}<br>P%{y}<br>Car " + str(car),
                 ))

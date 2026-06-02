@@ -62,6 +62,9 @@ TEAM_COLORS: dict[str, str] = {
     "Racing Spirit of Leman": "#428ca8",
     "Iron Lynx": "#fefe00",
     "TF Sport": "#eaaa1d",
+    # GTWC Europe
+    "Toyota Racing": "#D42D25",
+    "Genesis Magma Racing": "#EF732F",
     # IMSA
     "Cadillac Wayne Taylor Racing": "#0E3463",
     "JDC-Miller MotorSports": "#F8D94A",

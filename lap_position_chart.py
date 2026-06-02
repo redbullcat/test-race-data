@@ -108,7 +108,7 @@ def _build_figure(
 
 
 def _elapsed_to_seconds(val) -> float | None:
-    """Convert ELAPSED column value to float seconds."""
+    """Convert ELAPSED_SECONDS column value to float seconds."""
     try:
         return float(val)
     except (TypeError, ValueError):
@@ -121,8 +121,10 @@ def _hour_boundaries(class_df: pd.DataFrame) -> list[tuple[int, float, float]]:
     clock-hour that contains at least one lap in class_df.
     Hour 1 = 0–3600 s, Hour 2 = 3600–7200 s, etc.
     """
+    if "ELAPSED_SECONDS" not in class_df.columns:
+        return []
     elapsed_vals = (
-        class_df["ELAPSED"]
+        class_df["ELAPSED_SECONDS"]
         .dropna()
         .apply(_elapsed_to_seconds)
         .dropna()
@@ -135,7 +137,6 @@ def _hour_boundaries(class_df: pd.DataFrame) -> list[tuple[int, float, float]]:
     for h in range(1, n_hours + 1):
         e_start = (h - 1) * 3600.0
         e_end   = h * 3600.0
-        # Only include hours that actually contain laps
         mask = (elapsed_vals >= e_start) & (elapsed_vals < e_end)
         if mask.any():
             boundaries.append((h, e_start, e_end))
@@ -148,10 +149,12 @@ def _laps_for_hour(
     e_end: float,
 ) -> range | None:
     """
-    Return the range of LAP_NUMBER values whose ELAPSED falls within
+    Return the range of LAP_NUMBER values whose ELAPSED_SECONDS falls within
     [e_start, e_end). Returns None if no laps found.
     """
-    elapsed_s = class_df["ELAPSED"].apply(_elapsed_to_seconds)
+    if "ELAPSED_SECONDS" not in class_df.columns:
+        return None
+    elapsed_s = class_df["ELAPSED_SECONDS"].apply(_elapsed_to_seconds)
     mask = (elapsed_s >= e_start) & (elapsed_s < e_end)
     laps_in_hour = class_df.loc[mask, "LAP_NUMBER"].dropna().astype(int)
     if laps_in_hour.empty:

@@ -65,6 +65,18 @@ def show_lap_position_chart(df, team_colors):
             for _, row in class_df[["NUMBER", "TEAM"]].drop_duplicates().iterrows():
                 car_colors[row["NUMBER"]] = get_team_color(row["TEAM"], team_colors)
 
+            # Assign dash style: cars sharing a colour get solid / dash / dot
+            # in ascending numeric order so the assignment is deterministic.
+            DASH_STYLES = ["solid", "dash", "dot"]
+            color_to_cars: dict[str, list] = {}
+            for car in sort_cars(selected_cars):
+                col = car_colors.get(car, "#888888")
+                color_to_cars.setdefault(col, []).append(car)
+            car_dash: dict[str, str] = {}
+            for col, cars_same_color in color_to_cars.items():
+                for i, car in enumerate(cars_same_color):
+                    car_dash[car] = DASH_STYLES[min(i, len(DASH_STYLES) - 1)]
+
             fig = go.Figure()
             for car in selected_cars:
                 positions, laps = [], []
@@ -86,7 +98,11 @@ def show_lap_position_chart(df, team_colors):
                     mode="lines+markers",
                     name=f"Car {car}",
                     line_shape="hv",
-                    line=dict(color=car_colors.get(car, "#888888"), width=2),
+                    line=dict(
+                        color=car_colors.get(car, "#888888"),
+                        width=2,
+                        dash=car_dash.get(car, "solid"),
+                    ),
                     connectgaps=False,
                     hovertemplate="Lap %{x}<br>P%{y}<br>Car " + str(car),
                 ))

@@ -8,8 +8,8 @@ import streamlit as st
 
 from utils import (
     apply_dark_layout,
-    build_color_map,
     chart_export_buttons,
+    get_team_color,
     lap_to_seconds,
     sort_cars,
 )
@@ -194,7 +194,10 @@ def show_qualifying_story(
         return
 
     # ── Colour map ────────────────────────────────────────────────────────
-    car_colors = build_color_map(df_cls, team_colors)
+    # Keyed by car NUMBER (same approach as lap_position_chart)
+    car_colors: dict[str, str] = {}
+    for _, row in df_cls[["NUMBER", "TEAM"]].drop_duplicates().iterrows():
+        car_colors[str(row["NUMBER"])] = get_team_color(str(row["TEAM"]), team_colors)
 
     # ── Reference selection ───────────────────────────────────────────────
     # Find overall fastest lap in class

@@ -19,6 +19,26 @@ from utils import (
 # Helpers
 # ---------------------------------------------------------------------------
 
+def _sector_to_seconds(value) -> float | None:
+    """
+    Parse a sector time to seconds. Al-Kamel sector times (S1/S2/S3) are
+    typically plain 'SS.sss' floats, but may also be 'M:SS.sss' strings.
+    Returns None for anything unparseable.
+    """
+    if value is None:
+        return None
+    s = str(value).strip()
+    if not s or s.lower() in ("nan", "none", ""):
+        return None
+    try:
+        # Plain float / integer seconds: "23.456" or "23"
+        return float(s)
+    except ValueError:
+        pass
+    # Fall back to lap_to_seconds for M:SS.sss format
+    return lap_to_seconds(s)
+
+
 def _parse_sectors(df: pd.DataFrame) -> pd.DataFrame:
     """
     Parse S1, S2, S3 columns to seconds and add S1_S, S2_S, S3_S.
@@ -27,7 +47,7 @@ def _parse_sectors(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     for col, out in [("S1", "S1_S"), ("S2", "S2_S"), ("S3", "S3_S")]:
         if col in df.columns:
-            df[out] = df[col].apply(lap_to_seconds)
+            df[out] = df[col].apply(_sector_to_seconds)
         else:
             df[out] = None
     if "LAP_TIME_SECONDS" not in df.columns:

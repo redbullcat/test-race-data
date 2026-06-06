@@ -1,4 +1,3 @@
-import math
 import pandas as pd
 import plotly.express as px
 import streamlit as st
@@ -60,7 +59,36 @@ def show_practice_team_run_analysis(df, team_colors, key_prefix="prac"):
     team_df["HOUR_DT"] = parse_hour_time(team_df["HOUR"])
     team_df = team_df.dropna(subset=["HOUR_DT"])
 
-    session_durations = st.session_state.get("session_durations", {})
+    # ----------------------------
+    # Manual session duration inputs
+    # ----------------------------
+    sessions_in_data = sorted(team_df["PRACTICE_SESSION"].dropna().unique())
+    if not sessions_in_data:
+        st.info("No session data available.")
+        return
+
+    # Try to get auto-detected durations from session state as defaults
+    auto_durations = st.session_state.get("session_durations", {})
+
+    st.markdown("**Session durations (minutes)** — edit if auto-detection is wrong:")
+    dur_cols = st.columns(min(len(sessions_in_data), 4))
+    manual_durations: dict[str, float] = {}
+    for i, session_name in enumerate(sessions_in_data):
+        col = dur_cols[i % len(dur_cols)]
+        # Try to match auto-detected duration by session name substring
+        auto_val = 60.0
+        for fname, dur in auto_durations.items():
+            if session_name.lower().replace(" ", "") in fname.lower().replace("_", ""):
+                auto_val = dur
+                break
+        manual_durations[session_name] = col.number_input(
+            session_name,
+            min_value=1.0,
+            max_value=1440.0,
+            value=auto_val,
+            step=5.0,
+            key=f"{key_prefix}_trun_dur_{session_name}",
+        )
 
     # ----------------------------
     # Per-session charts
@@ -68,19 +96,7 @@ def show_practice_team_run_analysis(df, team_colors, key_prefix="prac"):
     for session_name, session_df in team_df.groupby("PRACTICE_SESSION"):
         st.markdown(f"### {session_name}")
 
-        # Extract session number from "Session X"
-        try:
-            session_number = int(session_name.split()[-1])
-        except Exception:
-            st.warning(f"Could not determine duration for {session_name}.")
-            continue
-
-        if session_number not in session_durations:
-            st.warning(f"No timing data available for {session_name}.")
-            continue
-
-        # Use canonical session duration (rounded up for display)
-        session_duration_min = math.ceil(session_durations[session_number])
+        session_duration_min = manual_durations.get(session_name, 60.0)
 
         # Session-relative zero (first car to cross line in this session)
         session_start_dt = session_df["HOUR_DT"].min()

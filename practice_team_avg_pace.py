@@ -103,7 +103,7 @@ def _chart1_team_combined(
     st.markdown("#### Chart 1 — Team Combined Average Pace")
     st.caption(
         "Pools laps from all cars in the team to produce one average "
-        "pace line per team across lap-in-stint position."
+        "pace per team. Slowest at top, fastest at bottom."
     )
 
     stints = _extract_stints(df_cls, min_laps=min_laps)
@@ -123,68 +123,58 @@ def _chart1_team_combined(
         st.info("No data after percentage filter.")
         return
 
-    # Average by team + lap-in-stint
-    grouped = (
-        all_laps.groupby(["TEAM", "Lap_In_Stint"])["LAP_TIME_SECONDS"]
-        .mean()
-        .reset_index()
-    )
-
-    teams = sorted(grouped["TEAM"].unique())
-    if not teams:
-        st.info("No team data available.")
-        return
-
-    fig = go.Figure()
-    for team in teams:
-        team_data = grouped[grouped["TEAM"] == team].sort_values("Lap_In_Stint")
-        color = get_team_color(team, team_colors)
-        fig.add_trace(go.Scatter(
-            x=team_data["Lap_In_Stint"],
-            y=team_data["LAP_TIME_SECONDS"],
-            mode="lines+markers",
-            name=team,
-            line=dict(color=color, width=2),
-            marker=dict(size=5),
-            hovertemplate=(
-                f"<b>{team}</b><br>"
-                "Lap in stint: %{x}<br>"
-                "Avg pace: %{customdata}<extra></extra>"
-            ),
-            customdata=[
-                seconds_to_laptime(v)
-                for v in team_data["LAP_TIME_SECONDS"]
-            ],
-        ))
-
-    fig.update_layout(
-        title="Team Combined Average Pace",
-        xaxis_title="Lap in stint",
-        yaxis_title="Avg lap time (s)",
-        hovermode="x unified",
-        height=500,
-        legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01),
-    )
-    apply_dark_layout(fig)
-
-    st.plotly_chart(fig, width="stretch")
-    chart_export_buttons(
-        fig=fig, filename="team_combined_avg_pace", height=500
-    )
-
-    # Summary table
+    # Average per team
     summary = (
         all_laps.groupby("TEAM")["LAP_TIME_SECONDS"]
         .mean()
         .reset_index()
-        .rename(columns={"LAP_TIME_SECONDS": "Avg Lap Time (s)"})
-        .sort_values("Avg Lap Time (s)")
+        .rename(columns={"LAP_TIME_SECONDS": "Avg"})
+        .sort_values("Avg", ascending=False)  # slowest first → fastest at bottom
     )
-    summary["Avg Lap Time"] = summary["Avg Lap Time (s)"].apply(seconds_to_laptime)
+
+    if summary.empty:
+        st.info("No team data available.")
+        return
+
+    colors = [get_team_color(t, team_colors) for t in summary["TEAM"]]
+    x_min = summary["Avg"].min()
+    x_max = summary["Avg"].max()
+    margin = (x_max - x_min) * 0.4 if x_max > x_min else 2.0
+
+    fig = go.Figure(go.Bar(
+        x=summary["Avg"],
+        y=summary["TEAM"],
+        orientation="h",
+        marker_color=colors,
+        text=[seconds_to_laptime(v) for v in summary["Avg"]],
+        textposition="outside",
+        hovertemplate=(
+            "<b>%{y}</b><br>Avg: %{customdata}<extra></extra>"
+        ),
+        customdata=[seconds_to_laptime(v) for v in summary["Avg"]],
+    ))
+
+    fig.update_layout(
+        title="Team Combined Average Pace",
+        xaxis=dict(
+            title="Average Lap Time (s)",
+            range=[x_min - margin, x_max + margin],
+        ),
+        yaxis_title="Team",
+        height=max(400, len(summary) * 40),
+        showlegend=False,
+    )
+    apply_dark_layout(fig)
+
+    st.plotly_chart(fig, width="stretch")
+    chart_export_buttons(fig=fig, filename="team_combined_avg_pace", height=500)
+
     with st.expander("Summary table", expanded=False):
+        summary["Avg Lap Time"] = summary["Avg"].apply(seconds_to_laptime)
         st.dataframe(
-            summary[["TEAM", "Avg Lap Time", "Avg Lap Time (s)"]]
-            .rename(columns={"TEAM": "Team"})
+            summary[["TEAM", "Avg Lap Time", "Avg"]]
+            .rename(columns={"TEAM": "Team", "Avg": "Avg Lap Time (s)"})
+            .sort_values("Avg Lap Time (s)")
             .style.format({"Avg Lap Time (s)": "{:.3f}"}),
             hide_index=True,
             width="stretch",
@@ -206,7 +196,7 @@ def _chart2_team_best_car(
     st.markdown("#### Chart 2 — Team Best Car Average Pace")
     st.caption(
         "For each team, computes each car's average pace, then uses the "
-        "fastest car as the team representative. Ranked fastest → slowest."
+        "fastest car as the team representative. Slowest at top, fastest at bottom."
     )
 
     stints = _extract_stints(df_cls, min_laps=min_laps)
@@ -234,66 +224,59 @@ def _chart2_team_best_car(
         .rename(columns={"LAP_TIME_SECONDS": "Car_Avg"})
     )
 
-    # Best (fastest) car per team
+    # Best (fastest) car per team, sorted slowest→fastest (slowest at top)
     team_best = (
         car_avg.sort_values("Car_Avg")
         .groupby("TEAM", sort=False)
         .first()
         .reset_index()
-        .sort_values("Car_Avg")
+        .sort_values("Car_Avg", ascending=False)
     )
 
     if team_best.empty:
         st.info("No team data available.")
         return
 
+    # Y labels: "CAR — Team" matching the image style
+    labels = [f"{row['NUMBER']} — {row['TEAM']}" for _, row in team_best.iterrows()]
     colors = [get_team_color(t, team_colors) for t in team_best["TEAM"]]
-    hover = [
-        f"<b>{row['TEAM']}</b><br>"
-        f"Best car: #{row['NUMBER']}<br>"
-        f"Avg: {seconds_to_laptime(row['Car_Avg'])}"
-        for _, row in team_best.iterrows()
-    ]
+
+    x_min = team_best["Car_Avg"].min()
+    x_max = team_best["Car_Avg"].max()
+    margin = (x_max - x_min) * 0.4 if x_max > x_min else 2.0
 
     fig = go.Figure(go.Bar(
-        x=team_best["TEAM"],
-        y=team_best["Car_Avg"],
+        x=team_best["Car_Avg"],
+        y=labels,
+        orientation="h",
         marker_color=colors,
-        hovertemplate="%{customdata}<extra></extra>",
-        customdata=hover,
         text=[seconds_to_laptime(v) for v in team_best["Car_Avg"]],
         textposition="outside",
+        hovertemplate="<b>%{y}</b><br>Avg: %{customdata}<extra></extra>",
+        customdata=[seconds_to_laptime(v) for v in team_best["Car_Avg"]],
     ))
-
-    # Y-axis range: just below fastest, just above slowest
-    y_min = team_best["Car_Avg"].min()
-    y_max = team_best["Car_Avg"].max()
-    margin = (y_max - y_min) * 0.4 if y_max > y_min else 2.0
 
     fig.update_layout(
         title="Team Best Car Average Pace",
-        xaxis_title="Team",
-        yaxis=dict(
-            title="Avg lap time (s)",
-            range=[y_min - margin, y_max + margin],
+        xaxis=dict(
+            title="Average Lap Time (s)",
+            range=[x_min - margin, x_max + margin],
         ),
-        height=500,
+        yaxis_title="Car Number — Team",
+        height=max(400, len(team_best) * 40),
         showlegend=False,
     )
     apply_dark_layout(fig)
 
     st.plotly_chart(fig, width="stretch")
-    chart_export_buttons(
-        fig=fig, filename="team_best_car_avg_pace", height=500
-    )
+    chart_export_buttons(fig=fig, filename="team_best_car_avg_pace", height=500)
 
-    # Summary table
     with st.expander("Summary table", expanded=False):
         display = team_best[["TEAM", "NUMBER", "Car_Avg"]].copy()
         display["Avg Lap Time"] = display["Car_Avg"].apply(seconds_to_laptime)
         display = display.rename(columns={
             "TEAM": "Team", "NUMBER": "Best Car", "Car_Avg": "Avg Lap Time (s)"
-        })
+        }).sort_values("Avg Lap Time (s)")
         st.dataframe(
             display.style.format({"Avg Lap Time (s)": "{:.3f}"}),
             hide_index=True,

@@ -129,7 +129,7 @@ def _chart1_team_combined(
         .mean()
         .reset_index()
         .rename(columns={"LAP_TIME_SECONDS": "Avg"})
-        .sort_values("Avg", ascending=False)  # slowest first → fastest at bottom
+        .sort_values("Avg", ascending=True)  # fastest at bottom, slowest at top
     )
 
     if summary.empty:
@@ -230,7 +230,7 @@ def _chart2_team_best_car(
         .groupby("TEAM", sort=False)
         .first()
         .reset_index()
-        .sort_values("Car_Avg", ascending=False)
+        .sort_values("Car_Avg", ascending=True)
     )
 
     if team_best.empty:

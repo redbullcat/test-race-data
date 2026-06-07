@@ -52,6 +52,7 @@ TEAM_COLORS: dict[str, str] = {
     "Aston Martin Thor Team": "#01655c",
     "Toyota Racing": "#100100",
     "Genesis Magma Racing": "#EF732F",
+    "Cadillac WTR": "#0E3463",
     # WEC LMGT3
     "AF Corse": "#FCE903",
     "Proton Competition": "#fcfcff",

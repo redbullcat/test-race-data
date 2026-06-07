@@ -201,13 +201,20 @@ if _live_mode and _live_available:
         f"{_elapsed_h:.2f}h elapsed"
     )
 
-    # Auto-refresh every 60 seconds
-    import time as _time
-    if "live_last_refresh" not in st.session_state:
-        st.session_state["live_last_refresh"] = _time.time()
-    if _time.time() - st.session_state["live_last_refresh"] > 60:
-        st.session_state["live_last_refresh"] = _time.time()
-        st.rerun()
+    # Auto-refresh every 60 seconds using streamlit-autorefresh
+    try:
+        from streamlit_autorefresh import st_autorefresh
+        st_autorefresh(interval=60000, key="live_autorefresh")
+    except ImportError:
+        import time as _time
+        if "live_last_refresh" not in st.session_state:
+            st.session_state["live_last_refresh"] = _time.time()
+        _seconds_since_refresh = _time.time() - st.session_state["live_last_refresh"]
+        _refresh_in = max(0, 60 - int(_seconds_since_refresh))
+        st.caption(f"⏱ Auto-refreshing in {_refresh_in}s — install streamlit-autorefresh for automatic updates")
+        if _seconds_since_refresh > 60:
+            st.session_state["live_last_refresh"] = _time.time()
+            st.rerun()
 
     if _df_live is None or _df_live.empty:
         st.warning("No laps recorded yet — waiting for data…")

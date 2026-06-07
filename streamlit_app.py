@@ -8,6 +8,8 @@ import streamlit as st
 from config import DATA_DIR, TEAM_COLORS, SERIES_DISPLAY, CLASS_PRIORITY
 from data_loader import load_file_index, load_race, parse_race_start_date
 from manifest import load_manifest, manifest_to_file_index, get_event_meta
+from live_db import live_db_available, load_live_race, get_session_meta, get_live_stats, DEFAULT_DB
+from live_db import live_db_available, load_live_race, get_session_meta, get_live_stats, DEFAULT_DB
 
 st.set_page_config(
     page_title="On The Apex",
@@ -65,6 +67,46 @@ def _get_param(key: str, default: str) -> str:
 # ---------------------------------------------------------------------------
 with st.sidebar:
     st.title("On The Apex")
+
+    # ── Live mode ────────────────────────────────────────────────────────────
+    _live_available = live_db_available(DEFAULT_DB)
+    _live_mode = st.toggle(
+        "🔴 Live mode",
+        value=False,
+        key="live_mode",
+        help="Read from live database (run live_collector.py first)",
+        disabled=not _live_available,
+    )
+    if not _live_available:
+        st.caption("No live data — start live_collector.py")
+    elif _live_mode:
+        _stats = get_live_stats(DEFAULT_DB)
+        _meta  = get_session_meta(DEFAULT_DB)
+        st.caption(
+            f"🟢 {_meta.get('session_name', 'Live session')} | "
+            f"{_stats.get('n_laps', 0)} laps | "
+            f"{_stats.get('elapsed_hours', 0):.1f}h elapsed"
+        )
+
+    # ── Live mode ────────────────────────────────────────────────────────────
+    _live_available = live_db_available(DEFAULT_DB)
+    _live_mode = st.toggle(
+        "🔴 Live mode",
+        value=False,
+        key="live_mode",
+        help="Read from live database (run live_collector.py first)",
+        disabled=not _live_available,
+    )
+    if not _live_available:
+        st.caption("No live data — start live_collector.py")
+    elif _live_mode:
+        _stats = get_live_stats(DEFAULT_DB)
+        _meta  = get_session_meta(DEFAULT_DB)
+        st.caption(
+            f"🟢 {_meta.get('session_name', 'Live session')} | "
+            f"{_stats.get('n_laps', 0)} laps | "
+            f"{_stats.get('elapsed_hours', 0):.1f}h elapsed"
+        )
 
     # ── Series ──────────────────────────────────────────────────────────────
     folder_to_display = SERIES_DISPLAY
@@ -231,7 +273,32 @@ _df_race = None
 _race_start_date = None
 _classes = []
 
-if has_race:
+# ── Live mode: load from SQLite instead of CSV ───────────────────────────
+if _live_mode and _live_available:
+    with st.spinner("Loading live race data…"):
+        _df_race = load_live_race(DEFAULT_DB)
+    if _df_race is not None and not _df_race.empty:
+        _classes = sorted(_df_race["CLASS"].dropna().unique())
+        _meta = get_session_meta(DEFAULT_DB)
+        _stats = get_live_stats(DEFAULT_DB)
+        st.info(
+            f"🔴 **Live mode** — {_meta.get('session_name', 'Live session')} | "
+            f"{_stats.get('n_laps', 0)} laps recorded | "
+            f"Lap {_stats.get('max_lap', 0)} | "
+            f"{_stats.get('elapsed_hours', 0):.2f}h elapsed"
+        )
+        # Auto-refresh every 60 seconds in live mode
+        import time as _time
+        if "live_last_refresh" not in st.session_state:
+            st.session_state["live_last_refresh"] = _time.time()
+        if _time.time() - st.session_state["live_last_refresh"] > 60:
+            st.session_state["live_last_refresh"] = _time.time()
+            st.rerun()
+    else:
+        st.warning("Live database found but no laps yet — waiting for data…")
+        _df_race = None
+
+elif has_race:
     _race_session_dir = os.path.join(DATA_DIR, selected_series, selected_year, selected_event, "race")
     _race_files       = event_sessions["race"]
     _race_file_path   = os.path.join(_race_session_dir, _race_files[0])

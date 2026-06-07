@@ -17,7 +17,7 @@ if platform.system() == "Windows":
     DEFAULT_DB = r"G:\My Drive\ontheapex_live.db"
 else:
     DEFAULT_DB = os.path.expanduser(
-        "~/Library/CloudStorage/GoogleDrive-yourname@gmail.com/My Drive/ontheapex_live.db"
+        "~/Library/CloudStorage/GoogleDrive-philip.e.oakley@gmail.com/My Drive/ontheapex_live.db"
     )
 
 
@@ -26,14 +26,9 @@ def live_db_available(db_path: str = DEFAULT_DB) -> bool:
     if not os.path.exists(db_path):
         return False
     try:
-        import shutil, tempfile
-        tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
-        tmp.close()
-        shutil.copy2(db_path, tmp.name)
-        conn = sqlite3.connect(f"file:{tmp.name}?mode=ro", uri=True)
+        conn = sqlite3.connect(db_path)
         n = conn.execute("SELECT COUNT(*) FROM laps").fetchone()[0]
         conn.close()
-        os.unlink(tmp.name)
         return n > 0
     except Exception:
         return False
@@ -47,18 +42,18 @@ def load_live_race(db_path: str = DEFAULT_DB) -> pd.DataFrame:
     if not os.path.exists(db_path):
         return pd.DataFrame()
 
-    # Copy to a temp file to bypass Google Drive Stream mode file caching
-    import shutil, tempfile
     try:
+        import shutil, tempfile
         tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
         tmp.close()
         shutil.copy2(db_path, tmp.name)
         read_path = tmp.name
     except Exception:
         read_path = db_path
+        tmp = None
 
     try:
-        conn = sqlite3.connect(f"file:{read_path}?mode=ro", uri=True)
+        conn = sqlite3.connect(f"file:{read_path}?mode=ro", uri=True) if read_path != db_path else sqlite3.connect(db_path)
         df = pd.read_sql_query(
             """
             SELECT
@@ -93,7 +88,6 @@ def load_live_race(db_path: str = DEFAULT_DB) -> pd.DataFrame:
                 pass
     except Exception:
         return pd.DataFrame()
-
     if df.empty:
         return df
 
@@ -116,13 +110,18 @@ def load_live_race(db_path: str = DEFAULT_DB) -> pd.DataFrame:
 
 
 def _open_db(db_path: str):
-    """Open a fresh copy of the database, bypassing OS file cache."""
-    import shutil, tempfile
-    tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
-    tmp.close()
-    shutil.copy2(db_path, tmp.name)
-    conn = sqlite3.connect(f"file:{tmp.name}?mode=ro", uri=True)
-    return conn, tmp.name
+    """Open a fresh copy of the database, bypassing OS file cache if possible."""
+    try:
+        import shutil, tempfile
+        tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        tmp.close()
+        shutil.copy2(db_path, tmp.name)
+        conn = sqlite3.connect(f"file:{tmp.name}?mode=ro", uri=True)
+        return conn, tmp.name
+    except Exception:
+        # Fall back to direct connection
+        conn = sqlite3.connect(db_path)
+        return conn, None
 
 
 def get_session_meta(db_path: str = DEFAULT_DB) -> dict:
@@ -132,7 +131,9 @@ def get_session_meta(db_path: str = DEFAULT_DB) -> dict:
         conn, tmp = _open_db(db_path)
         rows = conn.execute("SELECT key, value FROM session_meta").fetchall()
         conn.close()
-        os.unlink(tmp)
+        if tmp:
+            try: os.unlink(tmp)
+            except Exception: pass
         return {k: v for k, v in rows}
     except Exception:
         return {}
@@ -150,7 +151,9 @@ def get_live_stats(db_path: str = DEFAULT_DB) -> dict:
             "SELECT recorded_at FROM laps ORDER BY id DESC LIMIT 1"
         ).fetchone()
         conn.close()
-        os.unlink(tmp)
+        if tmp:
+            try: os.unlink(tmp)
+            except Exception: pass
         return {
             "n_laps":        n_laps,
             "max_lap":       max_lap or 0,

@@ -9,7 +9,6 @@ from config import DATA_DIR, TEAM_COLORS, SERIES_DISPLAY, CLASS_PRIORITY
 from data_loader import load_file_index, load_race, parse_race_start_date
 from manifest import load_manifest, manifest_to_file_index, get_event_meta
 from live_db import live_db_available, load_live_race, get_session_meta, get_live_stats, DEFAULT_DB
-from live_db import live_db_available, load_live_race, get_session_meta, get_live_stats, DEFAULT_DB
 
 st.set_page_config(
     page_title="On The Apex",
@@ -54,7 +53,7 @@ def default_class(series: str, classes: list[str]) -> str:
     return sorted(classes)[0] if classes else ""
 
 # ---------------------------------------------------------------------------
-# URL query param state — encodes series/year/event for bookmarkable links
+# URL query param state
 # ---------------------------------------------------------------------------
 params = st.query_params
 
@@ -67,26 +66,6 @@ def _get_param(key: str, default: str) -> str:
 # ---------------------------------------------------------------------------
 with st.sidebar:
     st.title("On The Apex")
-
-    # ── Live mode ────────────────────────────────────────────────────────────
-    _live_available = live_db_available(DEFAULT_DB)
-    _live_mode = st.toggle(
-        "🔴 Live mode",
-        value=False,
-        key="live_mode",
-        help="Read from live database (run live_collector.py first)",
-        disabled=not _live_available,
-    )
-    if not _live_available:
-        st.caption("No live data — start live_collector.py")
-    elif _live_mode:
-        _stats = get_live_stats(DEFAULT_DB)
-        _meta  = get_session_meta(DEFAULT_DB)
-        st.caption(
-            f"🟢 {_meta.get('session_name', 'Live session')} | "
-            f"{_stats.get('n_laps', 0)} laps | "
-            f"{_stats.get('elapsed_hours', 0):.1f}h elapsed"
-        )
 
     # ── Live mode ────────────────────────────────────────────────────────────
     _live_available = live_db_available(DEFAULT_DB)
@@ -188,13 +167,98 @@ with st.sidebar:
     section  = st.radio("Section", sections, label_visibility="collapsed")
 
 # ---------------------------------------------------------------------------
-# Update URL params to reflect current selection
+# Update URL params
 # ---------------------------------------------------------------------------
 st.query_params.update({
     "series": selected_series_display,
     "year":   selected_year,
     "event":  selected_event or "",
 })
+
+# ---------------------------------------------------------------------------
+# Live mode — dedicated page, bypasses event navigation entirely
+# ---------------------------------------------------------------------------
+if _live_mode and _live_available:
+    from live_db import load_live_race, get_session_meta, get_live_stats
+
+    _df_live = load_live_race(DEFAULT_DB)
+    _live_meta  = get_session_meta(DEFAULT_DB)
+    _live_stats = get_live_stats(DEFAULT_DB)
+
+    # Manual session type selector
+    _session_type = st.radio(
+        "Session type",
+        ["Practice / Test", "Qualifying", "Race"],
+        horizontal=True,
+        key="live_session_type",
+    )
+
+    st.title(f"🔴 Live — {_session_type}")
+    st.info(
+        f"**{_live_stats.get('n_laps', 0)} laps recorded** | "
+        f"Lap {_live_stats.get('max_lap', 0)} | "
+        f"{_elapsed_h:.2f}h elapsed"
+    )
+
+    # Auto-refresh every 60 seconds
+    import time as _time
+    if "live_last_refresh" not in st.session_state:
+        st.session_state["live_last_refresh"] = _time.time()
+    if _time.time() - st.session_state["live_last_refresh"] > 60:
+        st.session_state["live_last_refresh"] = _time.time()
+        st.rerun()
+
+    if _df_live is None or _df_live.empty:
+        st.warning("No laps recorded yet — waiting for data…")
+        st.stop()
+
+    # Class filter
+    _live_classes = sorted(_df_live["CLASS"].dropna().unique())
+    if len(_live_classes) > 1:
+        _live_class = st.selectbox("Class", _live_classes, key="live_class")
+        _df_live = _df_live[_df_live["CLASS"] == _live_class].copy()
+    elif _live_classes:
+        _live_class = _live_classes[0]
+        st.caption(f"Class: {_live_class}")
+
+    # Show charts based on inferred session type
+    if _session_type in ("Race", "Qualifying"):
+        from lap_position_chart import show_lap_position_chart
+        from pace_chart import show_pace_chart
+        from story_chart import show_story
+
+        live_tabs = st.tabs(["Position", "Pace", "Story"])
+
+        with live_tabs[0]:
+            show_lap_position_chart(_df_live, TEAM_COLORS)
+
+        with live_tabs[1]:
+            show_pace_chart(_df_live, TEAM_COLORS)
+
+        with live_tabs[2]:
+            show_story(_df_live, TEAM_COLORS, race_start_date=None)
+
+    else:
+        # Practice / Test — show practice charts
+        from practice_average_long_run_pace import show_practice_average_long_run_pace
+        from practice_team_avg_pace import show_practice_team_avg_pace
+
+        # Add PRACTICE_SESSION column (single session for live data)
+        _df_live["PRACTICE_SESSION"] = "Live Session"
+
+        live_tabs = st.tabs(["Lap Position", "Pace", "Team Pace"])
+
+        with live_tabs[0]:
+            from lap_position_chart import show_lap_position_chart
+            show_lap_position_chart(_df_live, TEAM_COLORS)
+
+        with live_tabs[1]:
+            show_practice_average_long_run_pace(_df_live, TEAM_COLORS, key_prefix="live")
+
+        with live_tabs[2]:
+            show_practice_team_avg_pace(_df_live, TEAM_COLORS, key_prefix="live")
+
+    st.stop()
 
 # ---------------------------------------------------------------------------
 # Season section
@@ -261,25 +325,22 @@ event_display  = format_event(selected_event)
 st.title(f"🏁 {selected_year} {selected_series_display} — {event_display}")
 
 # ---------------------------------------------------------------------------
-# Shared class filter — sits above the session tabs, applies to Race tab
-# Pre-loaded here so class is known before any tab is clicked
+# Race data loading
 # ---------------------------------------------------------------------------
 has_practice   = "practice"   in event_sessions
 has_qualifying = "qualifying" in event_sessions
 has_race       = "race"       in event_sessions
 
-# Pre-load race data eagerly (small overhead, eliminates per-tab delay)
-_df_race = None
+_df_race         = None
 _race_start_date = None
-_classes = []
+_classes         = []
 
-# ── Live mode: load from SQLite instead of CSV ───────────────────────────
 if _live_mode and _live_available:
     with st.spinner("Loading live race data…"):
         _df_race = load_live_race(DEFAULT_DB)
     if _df_race is not None and not _df_race.empty:
         _classes = sorted(_df_race["CLASS"].dropna().unique())
-        _meta = get_session_meta(DEFAULT_DB)
+        _meta  = get_session_meta(DEFAULT_DB)
         _stats = get_live_stats(DEFAULT_DB)
         st.info(
             f"🔴 **Live mode** — {_meta.get('session_name', 'Live session')} | "
@@ -287,7 +348,6 @@ if _live_mode and _live_available:
             f"Lap {_stats.get('max_lap', 0)} | "
             f"{_stats.get('elapsed_hours', 0):.2f}h elapsed"
         )
-        # Auto-refresh every 60 seconds in live mode
         import time as _time
         if "live_last_refresh" not in st.session_state:
             st.session_state["live_last_refresh"] = _time.time()
@@ -307,7 +367,9 @@ elif has_race:
     _race_start_date = parse_race_start_date(_race_files[0])
     _classes = sorted(_df_race["CLASS"].dropna().unique())
 
-# Shared class selector (only shown when race data is available)
+# ---------------------------------------------------------------------------
+# Shared class selector
+# ---------------------------------------------------------------------------
 _selected_class_filter = None
 _df_filtered = _df_race
 
@@ -362,7 +424,9 @@ with qualifying_tab:
 
 # ── Race ────────────────────────────────────────────────────────────────────
 with race_tab:
-    if not has_race:
+    if _live_mode and (_df_filtered is None or (_df_filtered is not None and _df_filtered.empty)):
+        st.info("Live mode active — waiting for race data.")
+    elif not has_race and not _live_mode:
         st.info("No race data available for this event.")
     elif _df_filtered is None or _df_filtered.empty:
         st.warning("No data for the selected class.")
@@ -370,7 +434,7 @@ with race_tab:
         df = _df_filtered
         race_start_date = _race_start_date
 
-        if race_start_date is None:
+        if race_start_date is None and not _live_mode:
             st.warning(
                 "Race start date not in filename — gap evolution unavailable. "
                 "Run `add_dates_to_race_files.py` to fix."
@@ -407,10 +471,9 @@ with race_tab:
 
         with battle_tab:
             from gap_evolution_chart import get_filtered_race_data, show_gap_evolution_chart, show_cumulative_time_chart
-            if race_start_date is None:
+            if race_start_date is None and not _live_mode:
                 st.info("Gap evolution requires a race start date in the filename.")
             else:
-                # Lazy trigger — avoids computing gap chart until user explicitly wants it
                 if st.button("Generate gap evolution", key="gap_trigger"):
                     st.session_state["gap_active"] = True
                 if st.session_state.get("gap_active"):
@@ -421,8 +484,7 @@ with race_tab:
                         show_gap_evolution_chart(filtered_df, TEAM_COLORS, selected_class, selected_cars)
                         show_cumulative_time_chart(filtered_df, TEAM_COLORS, selected_class, selected_cars)
                 else:
-                    st.info("Click 'Generate gap evolution' to load the chart. "
-                            "This may take a moment for long races.")
+                    st.info("Click 'Generate gap evolution' to load the chart.")
 
         with story_tab:
             from story_chart import show_story

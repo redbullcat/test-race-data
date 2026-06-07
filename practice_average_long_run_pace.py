@@ -64,11 +64,14 @@ def show_practice_average_long_run_pace(df, team_colors, key_prefix="prac"):
 
     # Build lap-indexed DataFrame per stint: lap position within stint, lap time
     lap_dfs = []
+    has_mfr = "MANUFACTURER" in stint_groups[0].columns if stint_groups else False
+    group_cols = ["NUMBER", "TEAM", "MANUFACTURER"] if has_mfr else ["NUMBER", "TEAM"]
+    select_cols = group_cols + ["Lap_in_Stint", "LAP_TIME"]
+
     for stint_df in stint_groups:
-        stint_df = stint_df.reset_index(drop=True)
-        stint_df = stint_df.copy()
-        stint_df["Lap_in_Stint"] = stint_df.index + 1  # 1-based lap index
-        lap_dfs.append(stint_df[["NUMBER", "TEAM", "MANUFACTURER", "Lap_in_Stint", "LAP_TIME"]])
+        stint_df = stint_df.reset_index(drop=True).copy()
+        stint_df["Lap_in_Stint"] = stint_df.index + 1
+        lap_dfs.append(stint_df[select_cols])
 
     all_laps_df = pd.concat(lap_dfs, ignore_index=True)
 
@@ -77,10 +80,10 @@ def show_practice_average_long_run_pace(df, team_colors, key_prefix="prac"):
     all_laps_df["Lap_Time_Seconds"] = all_laps_df["LAP_TIME"].apply(lap_to_seconds)
     all_laps_df = all_laps_df.dropna(subset=["Lap_Time_Seconds"])
 
-    # Group by car (NUMBER + TEAM + MANUFACTURER) and lap_in_stint, average lap time
+    # Group by car and lap_in_stint, average lap time
     avg_lap_times = (
         all_laps_df
-        .groupby(["NUMBER", "TEAM", "MANUFACTURER", "Lap_in_Stint"])["Lap_Time_Seconds"]
+        .groupby(group_cols + ["Lap_in_Stint"])["Lap_Time_Seconds"]
         .mean()
         .reset_index()
     )
@@ -167,7 +170,7 @@ def show_practice_average_long_run_pace(df, team_colors, key_prefix="prac"):
     # Summary table with overall average lap time per car (filtered laps only)
     summary = (
         filtered_avg_lap_times
-        .groupby(["NUMBER", "TEAM", "MANUFACTURER"])["Lap_Time_Seconds"]
+        .groupby(group_cols)["Lap_Time_Seconds"]
         .mean()
         .reset_index()
         .rename(columns={"Lap_Time_Seconds": "Average Lap Time (s)"})

@@ -39,11 +39,11 @@ def _build_position_matrix(
         f"Lap {i}": [None] * n_cars for i in laps_in_range
     }
     for lap in laps_in_range:
-        lap_df = (
-            class_df[class_df["LAP_NUMBER"] == lap]
-            .sort_values("ELAPSED")
-            .reset_index(drop=True)
-        )
+        lap_df = class_df[class_df["LAP_NUMBER"] == lap].copy()
+        elapsed_col = "ELAPSED" if "ELAPSED" in lap_df.columns else "ELAPSED_SECONDS"
+        if elapsed_col in lap_df.columns:
+            lap_df = lap_df.sort_values(elapsed_col)
+        lap_df = lap_df.reset_index(drop=True)
         for pos, car in enumerate(lap_df["NUMBER"].unique(), start=1):
             if pos - 1 < n_cars:
                 lap_positions[f"Lap {lap}"][pos - 1] = car

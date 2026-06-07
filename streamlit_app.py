@@ -194,6 +194,7 @@ if _live_mode and _live_available:
     )
 
     st.title(f"🔴 Live — {_session_type}")
+    _elapsed_h = _live_stats.get("elapsed_hours", 0)
     st.info(
         f"**{_live_stats.get('n_laps', 0)} laps recorded** | "
         f"Lap {_live_stats.get('max_lap', 0)} | "
@@ -243,19 +244,14 @@ if _live_mode and _live_available:
         from practice_average_long_run_pace import show_practice_average_long_run_pace
         from practice_team_avg_pace import show_practice_team_avg_pace
 
-        # Add PRACTICE_SESSION column (single session for live data)
         _df_live["PRACTICE_SESSION"] = "Live Session"
 
-        live_tabs = st.tabs(["Lap Position", "Pace", "Team Pace"])
+        live_tabs = st.tabs(["Pace", "Team Pace"])
 
         with live_tabs[0]:
-            from lap_position_chart import show_lap_position_chart
-            show_lap_position_chart(_df_live, TEAM_COLORS)
-
-        with live_tabs[1]:
             show_practice_average_long_run_pace(_df_live, TEAM_COLORS, key_prefix="live")
 
-        with live_tabs[2]:
+        with live_tabs[1]:
             show_practice_team_avg_pace(_df_live, TEAM_COLORS, key_prefix="live")
 
     st.stop()

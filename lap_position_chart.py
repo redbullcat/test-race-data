@@ -40,9 +40,20 @@ def _build_position_matrix(
     }
     for lap in laps_in_range:
         lap_df = class_df[class_df["LAP_NUMBER"] == lap].copy()
-        elapsed_col = "ELAPSED" if "ELAPSED" in lap_df.columns else "ELAPSED_SECONDS"
-        if elapsed_col in lap_df.columns:
-            lap_df = lap_df.sort_values(elapsed_col)
+        # Always sort by ELAPSED_SECONDS (numeric). Never sort by ELAPSED string —
+        # string sort breaks at the 10-hour mark ("10:..." sorts before "9:...").
+        if "ELAPSED_SECONDS" in lap_df.columns:
+            lap_df = lap_df.sort_values("ELAPSED_SECONDS")
+        elif "ELAPSED" in lap_df.columns:
+            # Fall back: parse ELAPSED to seconds on the fly
+            lap_df["_elapsed_s"] = lap_df["ELAPSED"].apply(lambda v: (
+                int(v.split(":")[0]) * 3600 + int(v.split(":")[1]) * 60 + float(v.split(":")[2])
+                if isinstance(v, str) and v.count(":") == 2
+                else int(v.split(":")[0]) * 60 + float(v.split(":")[1])
+                if isinstance(v, str) and v.count(":") == 1
+                else None
+            ))
+            lap_df = lap_df.sort_values("_elapsed_s")
         lap_df = lap_df.reset_index(drop=True)
         for pos, car in enumerate(lap_df["NUMBER"].unique(), start=1):
             if pos - 1 < n_cars:

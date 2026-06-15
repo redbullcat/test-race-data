@@ -17,30 +17,19 @@ def _compute_leaders(df: pd.DataFrame, race_start_date) -> tuple[pd.DataFrame, p
     overall_leaders = []
     class_leaders = []
     laps = sorted(df["LAP_NUMBER"].dropna().unique())
-    prev_overall_car = None
-
-    pit_col = "CROSSING_FINISH_LINE_IN_PIT" if "CROSSING_FINISH_LINE_IN_PIT" in df.columns else None
 
     for lap in laps:
         lap_df = df[df["LAP_NUMBER"] == lap]
 
-        if pit_col:
-            eligible = lap_df[lap_df[pit_col] != "B"]
-            if eligible.empty:
-                eligible = lap_df
-        else:
-            eligible = lap_df
-
+        # DO NOT filter out pit laps — a car that pits still crossed the line first
+        # if it was leading. CROSSING_FINISH_LINE_IN_PIT = "B" means the car pitted
+        # AFTER crossing, not that it didn't cross. Sorting by HOUR_DT (crossing time)
+        # is the correct and only criterion for determining the lap leader.
         flag_vals = lap_df["FLAG_AT_FL"].dropna().unique() if "FLAG_AT_FL" in lap_df.columns else []
         flag = flag_vals[0] if len(flag_vals) == 1 else None
 
-        if flag == "FCY" and prev_overall_car is not None:
-            prev_rows = eligible[eligible["CAR_ID"] == prev_overall_car]
-            overall_leader = prev_rows.iloc[0] if not prev_rows.empty else eligible.iloc[0]
-        else:
-            overall_leader = eligible.iloc[0]
+        overall_leader = lap_df.iloc[0]
 
-        prev_overall_car = overall_leader["CAR_ID"]
         overall_leaders.append({
             "LAP_NUMBER": lap,
             "CAR_ID": overall_leader["CAR_ID"],
@@ -50,7 +39,7 @@ def _compute_leaders(df: pd.DataFrame, race_start_date) -> tuple[pd.DataFrame, p
             "FLAG_AT_FL": flag,
         })
 
-        for cls, cls_df in eligible.groupby("CLASS"):
+        for cls, cls_df in lap_df.groupby("CLASS"):
             first = cls_df.iloc[0]
             class_leaders.append({
                 "LAP_NUMBER": lap,

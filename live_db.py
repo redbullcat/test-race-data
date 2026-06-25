@@ -12,13 +12,24 @@ import platform
 import sqlite3
 import pandas as pd
 
-# Default database path — matches live_collector.py
-if platform.system() == "Windows":
-    DEFAULT_DB = r"G:\My Drive\ontheapex_live.db"
-else:
-    DEFAULT_DB = os.path.expanduser(
-        "~/Library/CloudStorage/GoogleDrive-philip.e.oakley@gmail.com/My Drive/ontheapex_live.db"
-    )
+# Default database path — matches live_collector.py.
+# Override by setting the ONTHEAPEX_LIVE_DB environment variable.
+def _default_db_path() -> str:
+    env = os.environ.get("ONTHEAPEX_LIVE_DB")
+    if env:
+        return env
+    if platform.system() == "Windows":
+        return r"G:\My Drive\ontheapex_live.db"
+    google_drive = os.path.expanduser("~/Library/CloudStorage")
+    if os.path.isdir(google_drive):
+        for entry in os.listdir(google_drive):
+            if entry.startswith("GoogleDrive"):
+                candidate = os.path.join(google_drive, entry, "My Drive", "ontheapex_live.db")
+                if os.path.exists(candidate):
+                    return candidate
+    return os.path.expanduser("~/ontheapex_live.db")
+
+DEFAULT_DB = _default_db_path()
 
 
 def live_db_available(db_path: str = DEFAULT_DB) -> bool:

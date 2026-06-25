@@ -21,7 +21,7 @@ import pandas as pd
 import streamlit as st
 
 from config import DATA_DIR, SESSION_TYPES
-from utils import lap_to_seconds
+from utils import lap_to_seconds, validate_dataframe
 
 # ---------------------------------------------------------------------------
 # File index
@@ -129,10 +129,12 @@ def load_race(file_path: str, year: str, series: str) -> pd.DataFrame:
         + df["NUMBER"]
     )
 
+    validate_dataframe(df, ["NUMBER", "TEAM", "CLASS", "DRIVER_NAME", "LAP_TIME", "LAP_NUMBER"], context="load_race")
+
     df["LAP_TIME_SECONDS"] = df["LAP_TIME"].apply(lap_to_seconds)
     df["LAP_NUMBER"] = pd.to_numeric(
         df.get("LAP_NUMBER", pd.Series(dtype=float)), errors="coerce"
-    )
+    ).astype("Int64")
     if "ELAPSED" in df.columns:
         df["ELAPSED_SECONDS"] = df["ELAPSED"].apply(lap_to_seconds)
 
@@ -171,7 +173,7 @@ def load_practice_sessions(
         df["LAP_TIME_SECONDS"] = df["LAP_TIME"].apply(lap_to_seconds)
         df["LAP_NUMBER"] = pd.to_numeric(
             df.get("LAP_NUMBER", pd.Series(dtype=float)), errors="coerce"
-        )
+        ).astype("Int64")
         # Session label: strip .csv, replace _ with space, title-case
         label = os.path.splitext(filename)[0].replace("_", " ").title()
         df["PRACTICE_SESSION"] = label

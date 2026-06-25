@@ -107,15 +107,39 @@ def generate_manifest(data_dir: str = DATA_DIR) -> dict:
     return index
 
 
+def _data_dir_mtime(data_dir: str) -> float:
+    """Return the most recent mtime of any CSV file or session directory under data_dir."""
+    latest = 0.0
+    for root, dirs, files in os.walk(data_dir):
+        dirs[:] = [d for d in dirs if not d.startswith(".")]
+        for name in files:
+            if name.lower().endswith(".csv") and not name.startswith("."):
+                try:
+                    mtime = os.path.getmtime(os.path.join(root, name))
+                    if mtime > latest:
+                        latest = mtime
+                except OSError:
+                    pass
+    return latest
+
+
 def load_manifest(data_dir: str = DATA_DIR) -> dict | None:
     """
-    Load manifest.json if it exists and is newer than no files have changed.
-    Returns None if manifest doesn't exist (fall back to load_file_index).
+    Load manifest.json if it exists and is not stale.
+
+    Staleness check: if any CSV under data_dir is newer than manifest.json,
+    the manifest is considered stale and None is returned so the app falls
+    back to load_file_index() and the user sees fresh data.
+
+    Returns None if the manifest doesn't exist or is stale.
     """
     path = os.path.join(data_dir, "manifest.json")
     if not os.path.exists(path):
         return None
     try:
+        manifest_mtime = os.path.getmtime(path)
+        if _data_dir_mtime(data_dir) > manifest_mtime:
+            return None
         with open(path) as f:
             return json.load(f)
     except Exception:

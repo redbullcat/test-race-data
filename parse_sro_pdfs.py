@@ -389,6 +389,43 @@ def parse_sector_list(pdf_path: str) -> dict[str, dict]:
     return result
 
 
+# ─── Entry List parser ────────────────────────────────────────────────────────
+
+def parse_entry_list(pdf_path: str) -> dict[str, str]:
+    """
+    Parse the SRO Entry List PDF.
+    Returns {car_num: category} where category is one of
+    "Pro", "Gold", "Silver", "Bronze".
+
+    Layout: car number is at x≈100-120; CATEGORY column starts at x≈725.
+    """
+    doc = fitz.open(pdf_path)
+    CAR_X_MIN, CAR_X_MAX = 100, 120
+    CAT_X_MIN = 725
+    VALID_CATS = {"PRO", "GOLD", "SILVER", "BRONZE"}
+    CAT_TITLE = {"PRO": "Pro", "GOLD": "Gold", "SILVER": "Silver", "BRONZE": "Bronze"}
+
+    car_class: dict[str, str] = {}
+    for page in doc:
+        words = page.get_text("words")
+        by_y: dict[int, list] = defaultdict(list)
+        for x0, y0, x1, y1, text, *_ in words:
+            by_y[round(y0)].append((x0, text))
+        for y_key in sorted(by_y):
+            row = sorted(by_y[y_key])
+            car_num = None
+            cat = None
+            for x, text in row:
+                if CAR_X_MIN <= x <= CAR_X_MAX and text.isdigit():
+                    car_num = text
+                if x >= CAT_X_MIN and text.strip().upper() in VALID_CATS:
+                    cat = CAT_TITLE[text.strip().upper()]
+            if car_num and cat:
+                car_class[car_num] = cat
+
+    return car_class
+
+
 # ─── Top Speed List parser ─────────────────────────────────────────────────────
 
 _TSL_SKIP = {
@@ -612,12 +649,15 @@ def build_csv(
     pit_entries: dict,
     output_path: str,
     track_length_m: float = 5793.0,
+    car_classes: dict | None = None,
 ) -> int:
     """
     Combine all parsed data into an Al-Kamel format CSV.
     Returns number of rows written.
+    car_classes: optional {car_num: "Pro"|"Gold"|"Silver"|"Bronze"} from entry list.
     """
     race_start_secs = parse_secs(race_start_wall) or (16 * 3600)
+    car_classes = car_classes or {}
 
     rows = []
 
@@ -708,7 +748,7 @@ def build_csv(
                 "TOP_SPEED": lap.get("tsp", ""),
                 "DRIVER_NAME": driver_name,
                 "PIT_TIME": "",
-                "CLASS": DEFAULT_CLASS,
+                "CLASS": car_classes.get(car_num, DEFAULT_CLASS),
                 "GROUP": DEFAULT_GROUP,
                 "TEAM": team,
                 "MANUFACTURER": manufacturer,
@@ -743,10 +783,11 @@ def build_csv(
 
 PDF_PATTERNS = {
     "sector":   re.compile(r"sector.?list", re.I),
-    "messages": re.compile(r"message.?list", re.I),
-    "pits":     re.compile(r"pit.?stop.?list", re.I),
-    "speeds":   re.compile(r"top.?speed", re.I),
-    "lap_chart": re.compile(r"lap.?chart", re.I),
+    "messages":   re.compile(r"message.?list", re.I),
+    "pits":       re.compile(r"pit.?stop.?list", re.I),
+    "speeds":     re.compile(r"top.?speed", re.I),
+    "lap_chart":  re.compile(r"lap.?chart", re.I),
+    "entry_list": re.compile(r"entry.?list", re.I),
 }
 
 
@@ -803,6 +844,14 @@ def main():
         pit_entries = parse_pit_stops(pdfs["pits"])
         print(f"  Found pit data for {len(pit_entries)} cars")
 
+    car_classes: dict = {}
+    if pdfs["entry_list"]:
+        print(f"Parsing Entry List: {pdfs['entry_list']}")
+        car_classes = parse_entry_list(pdfs["entry_list"])
+        print(f"  Found class data for {len(car_classes)} cars")
+    else:
+        print("WARNING: No Entry List found — CLASS will default to GT3")
+
     print(f"Building CSV: {args.output_csv}")
     n = build_csv(
         sector_data=sector_data,
@@ -812,6 +861,7 @@ def main():
         pit_entries=pit_entries,
         output_path=args.output_csv,
         track_length_m=args.track_length,
+        car_classes=car_classes,
     )
     print(f"Done — {n} rows written to {args.output_csv}")
 

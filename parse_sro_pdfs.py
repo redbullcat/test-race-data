@@ -158,9 +158,10 @@ def _is_page_header(text: str) -> bool:
 
 
 def _is_time(text: str) -> bool:
-    """True if text looks like a time value (M:SS.sss, SS.sss, H:MM:SS.sss)."""
-    return bool(re.match(r'^\d+:\d{2}[:.]\d+$', text) or
-                re.match(r'^\d+\.\d{3}$', text))
+    """True if text looks like a time value (SS.sss, M:SS.sss, H:MM:SS.sss)."""
+    return bool(re.match(r'^\d+\.\d{3}$', text) or
+                re.match(r'^\d+:\d{2}\.\d+$', text) or
+                re.match(r'^\d+:\d{2}:\d{2}\.\d+$', text))
 
 
 def _is_lap_row(tokens: list[str]) -> bool:
@@ -196,12 +197,12 @@ def _parse_lap_record(tokens: list[str]) -> dict | None:
     Parse 10 tokens: Lap Id Time SE1 SP1 SE2 SP2 SE3 SP3 TSP.
     Returns dict or None if tokens don't look like a valid lap row.
     """
-    if len(tokens) < 9:
+    if len(tokens) < 3:
         return None
     lap_num_str, driver_id_str, lap_time_str = tokens[0], tokens[1], tokens[2]
     if not lap_num_str.isdigit():
         return None
-    if driver_id_str not in ("1", "2", "3"):
+    if not driver_id_str.isdigit():
         return None
     if not _is_time(lap_time_str):
         return None
@@ -225,7 +226,11 @@ def _parse_lap_record(tokens: list[str]) -> dict | None:
     }
 
 
-def _parse_column_stream(col_words: list[tuple]) -> dict[str, dict]:
+def _parse_column_stream(
+    col_words: list[tuple],
+    initial_car: str | None = None,
+    initial_sections: dict | None = None,
+) -> tuple[dict[str, dict], str | None]:
     """
     Parse a single column's word stream (list of (y, x, text)).
     Groups words by y-row, then parses car sections and lap records.
@@ -237,11 +242,13 @@ def _parse_column_stream(col_words: list[tuple]) -> dict[str, dict]:
           y=161: "Schuring, NED(#1) / ..."
           y=162: "2"
 
-    Returns {car_num: {"drivers": {id: name}, "rows": [(y, lap_record)]}}
+    When a car's section spans multiple pages, the continuation page has no
+    header.  Pass `initial_car` (the car active at the end of the previous
+    page) so orphaned laps are attributed correctly.
+
+    Returns (car_sections_dict, last_active_car).
+    car_sections: {car_num: {"drivers": {id: name}, "rows": [(y, lap_record)]}}
     """
-    # Page headers (title, track info, column labels) always sit above y≈148.
-    # Lap data and car names start at y≈149+.  Filter by position, not content,
-    # so data tokens like "3" (driver ID) are never accidentally dropped.
     DATA_Y_MIN = 148
     rows: dict[int, list] = defaultdict(list)
     for y, x, text in col_words:
@@ -249,9 +256,9 @@ def _parse_column_stream(col_words: list[tuple]) -> dict[str, dict]:
             continue
         rows[round(y)].append((x, text))
 
-    car_sections: dict[str, dict] = {}
-    current_car: str | None = None
-    pending_drivers: dict[int, str] = {}  # drivers seen on previous row, waiting for car num
+    car_sections: dict[str, dict] = dict(initial_sections) if initial_sections else {}
+    current_car: str | None = initial_car
+    pending_drivers: dict[int, str] = {}
 
     for y_key in sorted(rows.keys()):
         row = sorted(rows[y_key])
@@ -266,7 +273,7 @@ def _parse_column_stream(col_words: list[tuple]) -> dict[str, dict]:
         if has_nat and first_is_int:
             # Format A: "5 Rappange, NED(#1) / ..."  — car num + drivers on same row
             current_car = texts[0]
-            drivers = _parse_driver_line(texts[1:])  # skip the car number token
+            drivers = _parse_driver_line(texts[1:])
             if current_car not in car_sections:
                 car_sections[current_car] = {"drivers": drivers, "rows": []}
             else:
@@ -296,29 +303,49 @@ def _parse_column_stream(col_words: list[tuple]) -> dict[str, dict]:
             if rec is not None:
                 car_sections[current_car]["rows"].append((y_key, rec))
 
-    return car_sections
+    return car_sections, current_car
 
 
 def parse_sector_list(pdf_path: str) -> dict[str, dict]:
     """
     Parse the SRO Sector List PDF.
+
+    Layout: the left column contains car headers and each car's first N laps;
+    the right column contains the continuation laps (no headers) at the SAME
+    y-range as the left-column section for each car.  We parse the left column
+    to identify car sections (and their y extents), then collect right-column
+    laps that fall within each section's y-range on the same page.
+
     Returns {car_num: {"drivers": {id: name}, "laps": [lap_record, ...]}}
     """
     doc = fitz.open(pdf_path)
     result: dict[str, dict] = {}
 
+    # left_carry: the car number active at the end of the previous page's left
+    # column; used to attribute continuation laps that have no header on the
+    # next page.
+    left_carry: str | None = None
+
     for page_idx, page in enumerate(doc):
         mid_x = page.rect.width / 2
         left_words, right_words = page_words_by_column(page, mid_x)
 
-        # Group right-column words by y-row (headers above y≈148 already excluded)
+        # Build right-column lookup: y-row → list of (x, text)
         right_by_y: dict[int, list] = defaultdict(list)
         for y, x, text in right_words:
-            if y >= 148 and "besttime:" not in text and "besttime" not in text:
+            if y >= 148:
                 right_by_y[round(y)].append((x, text))
 
-        # Parse left column to find car sections and their y-rows
-        left_sections = _parse_column_stream(left_words)
+        # Parse left column.  If a car's section continued from the previous
+        # page, seed with a stub entry so orphaned laps are attributed.
+        seed: dict = {}
+        if left_carry and left_carry not in seed:
+            seed[left_carry] = {"drivers": {}, "rows": []}
+        left_sections, left_carry = _parse_column_stream(
+            left_words,
+            initial_car=left_carry,
+            initial_sections=seed,
+        )
 
         for car_num, section in left_sections.items():
             if car_num not in result:
@@ -326,36 +353,36 @@ def parse_sector_list(pdf_path: str) -> dict[str, dict]:
             else:
                 result[car_num]["drivers"].update(section["drivers"])
 
-            # Collect left-column laps
             left_laps = [rec for _, rec in section["rows"]]
-            left_y_rows = [y for y, _ in section["rows"]]
+            left_y_set = {y for y, _ in section["rows"]}
 
-            # Collect right-column overflow laps at the SAME y-rows as the left
-            # column.  Each car's overflow sits exactly opposite its left-column
-            # rows; never look beyond them to avoid grabbing the next car's data.
+            # The right-column continuation occupies the same y-range as the
+            # left-column section on this page.
             right_laps = []
-            for y_key in left_y_rows:
-                r_row = sorted(right_by_y.get(y_key, []))
-                r_texts = [t for _, t in r_row]
-                if "besttime:" in r_texts or "besttime" in r_texts:
-                    continue
-                rec = _parse_lap_record(r_texts)
-                if rec is not None:
-                    right_laps.append(rec)
+            if left_y_set:
+                min_y = min(left_y_set)
+                max_y = max(left_y_set)
+                for y_key in sorted(right_by_y.keys()):
+                    if y_key < min_y or y_key > max_y:
+                        continue
+                    r_row = sorted(right_by_y[y_key])
+                    r_texts = [t for _, t in r_row]
+                    if "besttime:" in r_texts or "besttime" in r_texts:
+                        continue
+                    rec = _parse_lap_record(r_texts)
+                    if rec is not None:
+                        right_laps.append(rec)
 
-            # Merge: left laps first, then right laps; sort by lap number
             all_laps = left_laps + right_laps
-            all_laps.sort(key=lambda r: r["lap"])
             result[car_num]["laps"].extend(all_laps)
 
-    # Deduplicate laps (same lap number for same car, keep first occurrence)
+    # Deduplicate and sort laps per car
     for car_num in result:
-        seen = set()
+        seen: set[int] = set()
         deduped = []
         for lap in result[car_num]["laps"]:
-            key = lap["lap"]
-            if key not in seen:
-                seen.add(key)
+            if lap["lap"] not in seen:
+                seen.add(lap["lap"])
                 deduped.append(lap)
         result[car_num]["laps"] = sorted(deduped, key=lambda r: r["lap"])
 

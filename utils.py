@@ -11,6 +11,8 @@ Single source of truth for:
 
 from __future__ import annotations
 
+import hashlib
+import colorsys
 from datetime import datetime, timedelta
 
 import pandas as pd
@@ -126,16 +128,31 @@ def parse_hour_with_rollover(
 # Team colour lookup
 # ---------------------------------------------------------------------------
 
+def _team_fallback_color(team: str) -> str:
+    """
+    Derive a deterministic, visually distinct colour from the team name.
+    Uses SHA-256 to map the name to a hue, then fixes saturation and
+    lightness so the colour is vivid enough to read on a dark background.
+    """
+    digest = hashlib.sha256(team.encode()).digest()
+    hue = int.from_bytes(digest[:2], "big") / 65536          # 0.0–1.0
+    sat = 0.65 + (digest[2] / 255) * 0.20                    # 0.65–0.85
+    light = 0.50 + (digest[3] / 255) * 0.15                  # 0.50–0.65
+    r, g, b = colorsys.hls_to_rgb(hue, light, sat)
+    return f"#{int(r*255):02x}{int(g*255):02x}{int(b*255):02x}"
+
+
 def get_team_color(team: str, team_colors: dict) -> str:
     """
     Fuzzy-match a team name against the team_colors dict.
-    Returns '#888888' if no match found.
+    Falls back to a deterministic colour derived from the team name so
+    every team gets a unique, consistent colour across all charts.
     """
     team_lower = str(team).lower()
     for key, color in team_colors.items():
         if key.lower() in team_lower:
             return color
-    return "#888888"
+    return _team_fallback_color(str(team))
 
 
 def build_color_map(df: pd.DataFrame, team_colors: dict) -> dict:

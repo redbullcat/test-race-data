@@ -1,7 +1,7 @@
 import pandas as pd
 import plotly.express as px
 import streamlit as st
-from utils import chart_export_buttons
+from utils import chart_export_buttons, get_team_color
 
 def show_practice_long_runs(longest_stints_df, team_colors, key_prefix="prac"):
     st.subheader("Longest Run Pace by Car (Lap-by-Lap)")
@@ -52,16 +52,9 @@ def show_practice_long_runs(longest_stints_df, team_colors, key_prefix="prac"):
 
     plot_df = pd.DataFrame(plot_data)
 
-    # --- Get color mapping ---
-    def get_team_color(team):
-        for key, color in team_colors.items():
-            if key.lower() in team.lower():
-                return color
-        return "#888888"
-
     car_to_color = {}
     for _, row in filtered_df.iterrows():
-        car_to_color[f"{row['Car']} — {row['Team']}"] = get_team_color(row["Team"])
+        car_to_color[f"{row['Car']} — {row['Team']}"] = get_team_color(row["Team"], team_colors)
 
     # --- Plot line chart ---
     fig = px.line(

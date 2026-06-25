@@ -1,7 +1,7 @@
 import plotly.express as px
 import pandas as pd
 import streamlit as st
-from utils import lap_to_seconds, sort_cars, chart_export_buttons
+from utils import lap_to_seconds, sort_cars, chart_export_buttons, get_team_color
 
 def show_practice_pace_chart(df, team_colors, key_prefix="prac"):
     st.subheader("Average Practice Pace by Car")
@@ -75,14 +75,7 @@ def show_practice_pace_chart(df, team_colors, key_prefix="prac"):
         .sort_values("LAP_TIME_SECONDS", ascending=True)
     )
 
-    # --- Map team colors ---
-    def get_team_color(team):
-        for key, color in team_colors.items():
-            if key.lower() in team.lower():
-                return color
-        return "#888888"
-
-    avg_df["color"] = avg_df["TEAM"].apply(get_team_color)
+    avg_df["color"] = avg_df["TEAM"].apply(lambda t: get_team_color(t, team_colors))
     avg_df["Label"] = avg_df["NUMBER"].astype(str) + " — " + avg_df["TEAM"]
 
     # --- Plotly bar chart ---

@@ -16,6 +16,7 @@ SERIES_DISPLAY: dict[str, str] = {
     "WEC":  "FIA WEC",
     "IMSA": "IMSA",
     "ELMS": "ELMS",
+    "GTWC": "GT World Challenge Europe",
 }
 
 # ---------------------------------------------------------------------------
@@ -34,6 +35,7 @@ CLASS_PRIORITY: dict[str, list[str]] = {
     "WEC":  ["hypercar", "lmp1"],
     "IMSA": ["gtp", "dpi", "dp", "prototype"],
     "ELMS": ["lmp2"],
+    "GTWC": ["gt3"],
 }
 # ---------------------------------------------------------------------------
 # Team colours

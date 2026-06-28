@@ -83,7 +83,7 @@ def show_race_stats(df, race_start_date, series: str = "", df_full=None):
     # Flag laps
     if "FLAG_AT_FL" in overall_df.columns:
         st.markdown("**Laps by flag condition**")
-        for flag, count in overall_df["FLAG_AT_FL"].fillna("GREEN").value_counts().items():
+        for flag, count in overall_df["FLAG_AT_FL"].fillna("GREEN").replace("GF", "GREEN").value_counts().items():
             st.write(f"- **{flag}**: {count} laps")
 
     # Longest lead stint

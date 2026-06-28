@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import colorsys
+import re
 from datetime import datetime, timedelta
 
 import pandas as pd
@@ -98,28 +99,33 @@ def parse_hour_with_rollover(
     -------
     pd.Series of datetime64[ns], indexed identically to df.
     """
-    def _parse_time(val):
-        for fmt in ("%H:%M:%S.%f", "%H:%M:%S"):
-            try:
-                return datetime.strptime(str(val).strip(), fmt).time()
-            except Exception:
-                continue
-        return None
+    _hour_re = re.compile(r"^(\d+):(\d{2}):(\d{2}(?:\.\d+)?)$")
 
+    def _parse_seconds(val):
+        """Return total seconds since midnight, supporting H >= 24 (Al-Kamel extended format)."""
+        m = _hour_re.match(str(val).strip())
+        if not m:
+            return None
+        h, mn, s = int(m.group(1)), int(m.group(2)), float(m.group(3))
+        return h * 3600 + mn * 60 + s
+
+    _epoch = datetime.combine(race_start_date, datetime.min.time())
     result = pd.Series(index=df.index, dtype="datetime64[ns]")
 
     for car_id, car_df in df.sort_values("LAP_NUMBER").groupby(group_col):
-        current_date = race_start_date
-        last_time = None
+        day_offset = 0.0  # seconds to add for midnight rollover (0-23h format only)
+        last_secs = None
         for idx, row in car_df.iterrows():
-            t = _parse_time(row["HOUR"])
-            if t is None:
+            secs = _parse_seconds(row["HOUR"])
+            if secs is None:
                 result.loc[idx] = pd.NaT
                 continue
-            if last_time is not None and t < last_time:
-                current_date += timedelta(days=1)
-            last_time = t
-            result.loc[idx] = datetime.combine(current_date, t)
+            # Only apply rollover for 0-23h format (secs < 24*3600).
+            # Extended-hour format (secs >= 24*3600) is already monotonic.
+            if secs < 86400 and last_secs is not None and secs < last_secs:
+                day_offset += 86400
+            last_secs = secs
+            result.loc[idx] = _epoch + timedelta(seconds=secs + day_offset)
 
     return result
 

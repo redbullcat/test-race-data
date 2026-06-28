@@ -137,16 +137,30 @@ def page_words_by_column(page, mid_x: float | None = None):
     """
     Return (left_words, right_words) where each is a list of (y, x, text)
     sorted by (y, x).  mid_x defaults to half the page width.
+
+    Driver header rows (containing NAT(#N) tokens) span the full page width
+    when cars have 3-4 drivers.  Those rows are placed entirely in the left
+    column so that all driver names are captured regardless of their x position.
     """
     if mid_x is None:
         mid_x = page.rect.width / 2
-    left, right = [], []
+
+    # Group words by y-row first so we can inspect the whole row
+    by_y: dict[int, list] = defaultdict(list)
     for x0, y0, x1, y1, text, *_ in page.get_text("words"):
-        entry = (round(y0, 1), x0, text)
-        if x0 < mid_x:
-            left.append(entry)
-        else:
-            right.append(entry)
+        by_y[round(y0)].append((x0, text))
+
+    left, right = [], []
+    for y_key, row in by_y.items():
+        row_texts = [t for _, t in row]
+        is_header = any(re.search(r'\([#\d]+\)', t) for t in row_texts)
+        for x, text in row:
+            entry = (float(y_key), x, text)
+            if is_header or x < mid_x:
+                left.append(entry)
+            else:
+                right.append(entry)
+
     left.sort()
     right.sort()
     return left, right
@@ -163,14 +177,6 @@ def _is_time(text: str) -> bool:
                 re.match(r'^\d+:\d{2}\.\d+$', text) or
                 re.match(r'^\d+:\d{2}:\d{2}\.\d+$', text))
 
-
-def _is_lap_row(tokens: list[str]) -> bool:
-    """Check if a list of tokens looks like the start of a lap record."""
-    if len(tokens) < 3:
-        return False
-    return (tokens[0].isdigit() and
-            tokens[1] in ("1", "2", "3") and
-            _is_time(tokens[2]))
 
 
 # ─── Sector List parser ────────────────────────────────────────────────────────
@@ -264,11 +270,29 @@ def _parse_column_stream(
         row = sorted(rows[y_key])
         texts = [t for _, t in row]
 
-        if "besttime:" in texts or "besttime" in texts:
-            continue
-
         has_nat = any(re.search(r'\([#\d]+\)', t) for t in texts)
         first_is_int = bool(texts) and texts[0].isdigit()
+        has_besttime = "besttime:" in texts or "besttime" in texts
+
+        if has_besttime:
+            # Spa format: car header and besttime appear on the SAME row.
+            # Two sub-cases:
+            #   Format A+bt: "7 Drudi, SMR(#2) / ... theoretical besttime: 2:18.058"
+            #     → car num + drivers + besttime all on one row (has_nat=True, first_is_int=True)
+            #   Format B-simple: "0 theoretical besttime: 2:17.486"
+            #     → car num on besttime row, drivers buffered from previous row
+            if first_is_int:
+                current_car = texts[0]
+                if has_nat:
+                    new_drivers = _parse_driver_line(texts[1:])
+                else:
+                    new_drivers = dict(pending_drivers)
+                if current_car not in car_sections:
+                    car_sections[current_car] = {"drivers": new_drivers, "rows": []}
+                else:
+                    car_sections[current_car]["drivers"].update(new_drivers)
+            pending_drivers = {}
+            continue
 
         if has_nat and first_is_int:
             # Format A: "5 Rappange, NED(#1) / ..."  — car num + drivers on same row
@@ -391,39 +415,157 @@ def parse_sector_list(pdf_path: str) -> dict[str, dict]:
 
 # ─── Entry List parser ────────────────────────────────────────────────────────
 
-def parse_entry_list(pdf_path: str) -> dict[str, str]:
+def _words_in_band(row: list[tuple], x_min: float, x_max: float) -> list[str]:
+    """Return text tokens from a sorted (x, text) row that fall within x_min..x_max."""
+    return [t for x, t in row if x_min <= x <= x_max]
+
+
+def parse_entry_list(pdf_path: str) -> dict[str, dict]:
     """
     Parse the SRO Entry List PDF.
-    Returns {car_num: category} where category is one of
-    "Pro", "Gold", "Silver", "Bronze".
 
-    Layout: car number is at x≈100-120; CATEGORY column starts at x≈725.
+    Dynamically detects column positions from the header row so the same
+    function works regardless of page layout differences between events.
+
+    Returns {car_num: {
+        "class":        str,          # "Pro" / "Gold" / "Silver" / "Bronze" / "Pro-Am"
+        "team":         str,
+        "manufacturer": str,          # brand extracted from car model string
+        "drivers":      {1: "Firstname Lastname", 2: ..., ...},  # position-keyed
+        "last_to_full": {"lastname": "Firstname Lastname", ...}, # for name lookup
+    }}
     """
     doc = fitz.open(pdf_path)
-    CAR_X_MIN, CAR_X_MAX = 100, 120
-    CAT_X_MIN = 725
-    VALID_CATS = {"PRO", "GOLD", "SILVER", "BRONZE"}
-    CAT_TITLE = {"PRO": "Pro", "GOLD": "Gold", "SILVER": "Silver", "BRONZE": "Bronze"}
 
-    car_class: dict[str, str] = {}
+    VALID_CATS = {"PRO", "GOLD", "SILVER", "BRONZE", "PRO-AM", "PROAM", "PAM", "SILVER-AM", "SILVERAM"}
+    CAT_TITLE  = {
+        "PRO": "Pro", "GOLD": "Gold", "SILVER": "Silver", "BRONZE": "Bronze",
+        "PRO-AM": "Pro-Am", "PROAM": "Pro-Am", "PAM": "Pro-Am",
+        "SILVER-AM": "Silver-Am", "SILVERAM": "Silver-Am",
+    }
+    BRANDS_SORTED = sorted(BRANDS, key=len, reverse=True)
+
+    result: dict[str, dict] = {}
+
     for page in doc:
-        words = page.get_text("words")
+        words_raw = page.get_text("words")
         by_y: dict[int, list] = defaultdict(list)
-        for x0, y0, x1, y1, text, *_ in words:
+        for x0, y0, x1, y1, text, *_ in words_raw:
             by_y[round(y0)].append((x0, text))
+
+        # ── Detect header row ──────────────────────────────────────────────────
+        # The header row contains "#", "TEAM", "CATEGORY" (and usually "DRIVER").
+        # We look for the row where all three appear close together.
+        header_y = None
+        col: dict[str, float] = {}   # header-name → x position
+
         for y_key in sorted(by_y):
             row = sorted(by_y[y_key])
-            car_num = None
-            cat = None
-            for x, text in row:
-                if CAR_X_MIN <= x <= CAR_X_MAX and text.isdigit():
-                    car_num = text
-                if x >= CAT_X_MIN and text.strip().upper() in VALID_CATS:
-                    cat = CAT_TITLE[text.strip().upper()]
-            if car_num and cat:
-                car_class[car_num] = cat
+            texts = [t.upper() for _, t in row]
+            if "#" in texts and "CATEGORY" in texts and "TEAM" in texts:
+                header_y = y_key
+                for x, t in row:
+                    col[t.upper()] = x
+                break
 
-    return car_class
+        if header_y is None:
+            continue  # no recognisable header on this page
+
+        # x boundaries for each column (midpoint between adjacent headers)
+        hash_x    = col.get("#", 104)
+        team_x    = col.get("TEAM", hash_x + 60)
+        cat_x     = col.get("CATEGORY", 700)
+        car_x     = col.get("CAR", cat_x - 80)
+
+        # DRIVER columns: header may say "DRIVER" repeated with "1","2","3","4" nearby
+        driver_xs: list[float] = []
+        # Collect all x positions of the word "DRIVER" in the header row
+        for x, t in sorted(by_y[header_y]):
+            if t.upper() == "DRIVER":
+                driver_xs.append(x)
+        # If only one "DRIVER" header word, the numbers 1-4 appear as separate tokens just after
+        if not driver_xs:
+            driver_xs = [team_x + 60]   # safe fallback
+
+        # Build per-driver x-bands: [driver_xs[i], driver_xs[i+1]) or up to car_x
+        driver_bands: list[tuple[float, float]] = []
+        for i, dx in enumerate(driver_xs):
+            end = driver_xs[i + 1] if i + 1 < len(driver_xs) else car_x
+            driver_bands.append((dx - 5, end - 5))
+
+        # ── Parse data rows ────────────────────────────────────────────────────
+        for y_key in sorted(by_y):
+            if y_key <= header_y:
+                continue
+            row = sorted(by_y[y_key])
+            if not row:
+                continue
+
+            # Car number: numeric token closest to hash_x
+            car_num = None
+            for x, t in row:
+                if abs(x - hash_x) < 30 and t.isdigit():
+                    car_num = t
+                    break
+            if car_num is None:
+                continue
+
+            # Category: rightmost token at/beyond cat_x that is a known category
+            cat_str = None
+            for x, t in reversed(row):
+                if x >= cat_x - 20:
+                    key = t.strip().upper().replace(" ", "").replace("-", "")
+                    normalized = t.strip().upper()
+                    if normalized in VALID_CATS or key in VALID_CATS:
+                        cat_str = CAT_TITLE.get(normalized) or CAT_TITLE.get(key, normalized.title())
+                        break
+            if cat_str is None:
+                continue
+
+            # Team: words between hash_x and first driver column
+            team_words = _words_in_band(row, hash_x + 15, driver_bands[0][0] if driver_bands else team_x + 100)
+            team = " ".join(team_words).strip()
+
+            # Car model: words between car_x and cat_x
+            car_words = _words_in_band(row, car_x - 5, cat_x - 5)
+            car_model = " ".join(car_words).strip()
+
+            # Manufacturer: first matching brand in car_model
+            manufacturer = ""
+            for brand in BRANDS_SORTED:
+                if brand.lower() in car_model.lower():
+                    manufacturer = brand
+                    break
+
+            # Driver names: one per band
+            drivers: dict[int, str] = {}
+            last_to_full: dict[str, str] = {}
+            for pos, (bx_min, bx_max) in enumerate(driver_bands, start=1):
+                name_parts = _words_in_band(row, bx_min, bx_max)
+                # Filter out LIC codes (2-4 uppercase letters only) and "/"
+                name_parts = [p for p in name_parts if p != "/" and not re.match(r'^[A-Z]{2,4}$', p)]
+                if not name_parts:
+                    continue
+                # Title-case the full name: "SCHURING Morris" or "Morris SCHURING"
+                full = " ".join(p.title() for p in name_parts)
+                drivers[pos] = full
+                # Last word of the name as lookup key (case-insensitive)
+                last_to_full[name_parts[-1].lower()] = full
+
+            if car_num in result:
+                # Merge (second page may repeat some entries)
+                result[car_num]["drivers"].update(drivers)
+                result[car_num]["last_to_full"].update(last_to_full)
+            else:
+                result[car_num] = {
+                    "class":        cat_str,
+                    "team":         team,
+                    "manufacturer": manufacturer,
+                    "drivers":      drivers,
+                    "last_to_full": last_to_full,
+                }
+
+    return result
 
 
 # ─── Top Speed List parser ─────────────────────────────────────────────────────
@@ -649,27 +791,55 @@ def build_csv(
     pit_entries: dict,
     output_path: str,
     track_length_m: float = 5793.0,
-    car_classes: dict | None = None,
+    entry_list_data: dict | None = None,
 ) -> int:
     """
     Combine all parsed data into an Al-Kamel format CSV.
     Returns number of rows written.
-    car_classes: optional {car_num: "Pro"|"Gold"|"Silver"|"Bronze"} from entry list.
+    entry_list_data: dict from parse_entry_list(), keyed by car number.
+      Provides class, team, manufacturer, and full driver names.
+      Top Speed List data takes priority for team/manufacturer when present.
     """
     race_start_secs = parse_secs(race_start_wall) or (16 * 3600)
-    car_classes = car_classes or {}
+    entry_list_data = entry_list_data or {}
 
     rows = []
 
     for car_num, car_data in sector_data.items():
-        drivers = car_data.get("drivers", {})
+        drivers = car_data.get("drivers", {})  # {driver_id: last_name} from sector list
         laps = car_data.get("laps", [])
         if not laps:
             continue
 
-        car_info = top_speed_data.get(car_num, {})
-        team = car_info.get("team", "")
-        manufacturer = car_info.get("manufacturer", "")
+        entry = entry_list_data.get(car_num, {})
+        tsd   = top_speed_data.get(car_num, {})
+
+        # Team/manufacturer: Top Speed List wins when present, entry list is fallback
+        team         = tsd.get("team", "")         or entry.get("team", "")
+        manufacturer = tsd.get("manufacturer", "") or entry.get("manufacturer", "")
+
+        # Class from entry list (more authoritative than default)
+        car_class = entry.get("class", DEFAULT_CLASS)
+
+        # Full driver name lookup:
+        #   1. sector list gives last name → look up in entry list last_to_full
+        #   2. if no last name match, fall back to entry list by driver position
+        #   3. last resort: use the last name as-is (better than "Driver N")
+        last_to_full    = entry.get("last_to_full", {})
+        entry_by_pos    = entry.get("drivers", {})   # {1: full_name, ...}
+
+        def resolve_driver_name(driver_id: int, last_name: str) -> str:
+            if last_name:
+                full = last_to_full.get(last_name.lower())
+                if full:
+                    return full
+                # Partial match: last_name is a suffix of a key
+                for key, full in last_to_full.items():
+                    if last_name.lower() in key:
+                        return full
+                return last_name  # at least return the last name
+            # driver_id has no name from sector list → try entry list by position
+            return entry_by_pos.get(driver_id, f"Driver {driver_id}")
 
         # Pit entry times for this car (in race-elapsed seconds)
         car_pit_times = sorted(pit_entries.get(car_num, []))
@@ -685,7 +855,8 @@ def build_csv(
         for lap in laps:
             lap_num = lap["lap"]
             driver_id = lap["driver_id"]
-            driver_name = drivers.get(driver_id, f"Driver {driver_id}")
+            last_name = drivers.get(driver_id, "")
+            driver_name = resolve_driver_name(driver_id, last_name)
 
             lap_time_secs = parse_secs(lap["lap_time"])
             if lap_time_secs is None:
@@ -748,7 +919,7 @@ def build_csv(
                 "TOP_SPEED": lap.get("tsp", ""),
                 "DRIVER_NAME": driver_name,
                 "PIT_TIME": "",
-                "CLASS": car_classes.get(car_num, DEFAULT_CLASS),
+                "CLASS": car_class,
                 "GROUP": DEFAULT_GROUP,
                 "TEAM": team,
                 "MANUFACTURER": manufacturer,
@@ -829,7 +1000,7 @@ def main():
         top_speed_data = parse_top_speed_list(pdfs["speeds"])
         print(f"  Found {len(top_speed_data)} cars with team/manufacturer info")
     else:
-        print("WARNING: No Top Speed List found — TEAM/MANUFACTURER will be empty")
+        print("WARNING: No Top Speed List found — entry list used for TEAM/MANUFACTURER")
 
     race_start_wall = "16:00:00.000"
     flag_windows: list = []
@@ -844,13 +1015,14 @@ def main():
         pit_entries = parse_pit_stops(pdfs["pits"])
         print(f"  Found pit data for {len(pit_entries)} cars")
 
-    car_classes: dict = {}
+    entry_list_data: dict = {}
     if pdfs["entry_list"]:
         print(f"Parsing Entry List: {pdfs['entry_list']}")
-        car_classes = parse_entry_list(pdfs["entry_list"])
-        print(f"  Found class data for {len(car_classes)} cars")
+        entry_list_data = parse_entry_list(pdfs["entry_list"])
+        print(f"  Found entry data for {len(entry_list_data)} cars "
+              f"(class, team, manufacturer, driver names)")
     else:
-        print("WARNING: No Entry List found — CLASS will default to GT3")
+        print("WARNING: No Entry List found — CLASS defaults to GT3, team/manufacturer empty")
 
     print(f"Building CSV: {args.output_csv}")
     n = build_csv(
@@ -861,7 +1033,7 @@ def main():
         pit_entries=pit_entries,
         output_path=args.output_csv,
         track_length_m=args.track_length,
-        car_classes=car_classes,
+        entry_list_data=entry_list_data,
     )
     print(f"Done — {n} rows written to {args.output_csv}")
 

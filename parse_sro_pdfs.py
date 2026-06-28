@@ -48,8 +48,8 @@ DEFAULT_GROUP = ""
 # Known GT3 manufacturer brands for name extraction from car model strings
 BRANDS = [
     "Ferrari", "BMW", "Porsche", "Mercedes-AMG", "Audi", "McLaren",
-    "Aston Martin", "Lamborghini", "Chevrolet", "Ford", "Honda", "Acura",
-    "Bentley", "Nissan", "Lexus",
+    "Aston Martin", "Lamborghini", "Chevrolet", "Corvette", "Ford", "Honda",
+    "Acura", "Bentley", "Nissan", "Lexus",
 ]
 
 
@@ -447,66 +447,72 @@ def parse_entry_list(pdf_path: str) -> dict[str, dict]:
 
     result: dict[str, dict] = {}
 
+    # Column layout carried across pages — continuation pages often omit headers
+    hash_x: float = 104
+    cat_x: float  = 700
+    car_x: float  = 620
+    driver_xs: list[float] = []
+    lic_xs: list[float]    = []
+    layout_known: bool     = False
+
     for page in doc:
         words_raw = page.get_text("words")
         by_y: dict[int, list] = defaultdict(list)
         for x0, y0, x1, y1, text, *_ in words_raw:
             by_y[round(y0)].append((x0, text))
 
-        # ── Detect header row ──────────────────────────────────────────────────
+        # ── Detect header row (update layout if present) ───────────────────────
         # The header row contains "#", "TEAM", "CATEGORY" (and usually "DRIVER").
-        # We look for the row where all three appear close together.
         header_y = None
-        col: dict[str, float] = {}   # header-name → x position
-
         for y_key in sorted(by_y):
             row = sorted(by_y[y_key])
             texts = [t.upper() for _, t in row]
             if "#" in texts and "CATEGORY" in texts and "TEAM" in texts:
                 header_y = y_key
-                for x, t in row:
-                    col[t.upper()] = x
+                col: dict[str, float] = {t.upper(): x for x, t in row}
+                hash_x    = col.get("#", hash_x)
+                cat_x     = col.get("CATEGORY", cat_x)
+                car_x     = col.get("CAR", cat_x - 80)
+                driver_xs = sorted(x for x, t in row if t.upper() == "DRIVER")
+                lic_xs    = sorted(x for x, t in row if t.upper() == "LIC")
+                if not driver_xs:
+                    driver_xs = [hash_x + 60]
+                layout_known = True
                 break
 
-        if header_y is None:
-            continue  # no recognisable header on this page
+        if not layout_known:
+            continue  # no layout known yet — skip page
 
-        # x boundaries for each column (midpoint between adjacent headers)
-        hash_x    = col.get("#", 104)
-        team_x    = col.get("TEAM", hash_x + 60)
-        cat_x     = col.get("CATEGORY", 700)
-        car_x     = col.get("CAR", cat_x - 80)
-
-        # DRIVER columns: header may say "DRIVER" repeated with "1","2","3","4" nearby
-        driver_xs: list[float] = []
-        # Collect all x positions of the word "DRIVER" in the header row
-        for x, t in sorted(by_y[header_y]):
-            if t.upper() == "DRIVER":
-                driver_xs.append(x)
-        # If only one "DRIVER" header word, the numbers 1-4 appear as separate tokens just after
-        if not driver_xs:
-            driver_xs = [team_x + 60]   # safe fallback
-
-        # Build per-driver x-bands: [driver_xs[i], driver_xs[i+1]) or up to car_x
+        # Build per-driver x-bands as (driver_x - 20, lic_x - 5).
+        # Extending 20px left of the DRIVER header captures first-name tokens
+        # that appear slightly to the left of the header in some layouts.
         driver_bands: list[tuple[float, float]] = []
         for i, dx in enumerate(driver_xs):
-            end = driver_xs[i + 1] if i + 1 < len(driver_xs) else car_x
-            driver_bands.append((dx - 5, end - 5))
+            lx = lic_xs[i] if i < len(lic_xs) else car_x
+            driver_bands.append((dx - 20, lx - 5))
+
+        # Team band: from just past hash_x to just before first driver column
+        team_x_end = (driver_xs[0] - 20) if driver_xs else (car_x - 100)
+
+        # Car model band: from just past last LIC column to just before CATEGORY
+        car_model_x_start = (lic_xs[-1] + 5) if lic_xs else (car_x - 5)
 
         # ── Parse data rows ────────────────────────────────────────────────────
         for y_key in sorted(by_y):
-            if y_key <= header_y:
+            if header_y is not None and y_key <= header_y:
                 continue
             row = sorted(by_y[y_key])
             if not row:
                 continue
 
-            # Car number: numeric token closest to hash_x
+            # Car number: numeric token CLOSEST to hash_x (avoids adjacent QT column)
             car_num = None
+            best_dist = float("inf")
             for x, t in row:
-                if abs(x - hash_x) < 30 and t.isdigit():
+                d = abs(x - hash_x)
+                if d < 30 and t.isdigit() and d < best_dist:
+                    best_dist = d
                     car_num = t
-                    break
             if car_num is None:
                 continue
 
@@ -522,12 +528,12 @@ def parse_entry_list(pdf_path: str) -> dict[str, dict]:
             if cat_str is None:
                 continue
 
-            # Team: words between hash_x and first driver column
-            team_words = _words_in_band(row, hash_x + 15, driver_bands[0][0] if driver_bands else team_x + 100)
+            # Team: words from just past hash_x up to first driver band start
+            team_words = _words_in_band(row, hash_x + 15, team_x_end)
             team = " ".join(team_words).strip()
 
-            # Car model: words between car_x and cat_x
-            car_words = _words_in_band(row, car_x - 5, cat_x - 5)
+            # Car model: words between last LIC column and CATEGORY
+            car_words = _words_in_band(row, car_model_x_start, cat_x - 5)
             car_model = " ".join(car_words).strip()
 
             # Manufacturer: first matching brand in car_model
@@ -537,13 +543,14 @@ def parse_entry_list(pdf_path: str) -> dict[str, dict]:
                     manufacturer = brand
                     break
 
-            # Driver names: one per band
+            # Driver names: one per band.
+            # Bands end before the LIC column so country codes are excluded;
+            # only "/" separators need filtering.
             drivers: dict[int, str] = {}
             last_to_full: dict[str, str] = {}
             for pos, (bx_min, bx_max) in enumerate(driver_bands, start=1):
                 name_parts = _words_in_band(row, bx_min, bx_max)
-                # Filter out LIC codes (2-4 uppercase letters only) and "/"
-                name_parts = [p for p in name_parts if p != "/" and not re.match(r'^[A-Z]{2,4}$', p)]
+                name_parts = [p for p in name_parts if p != "/"]
                 if not name_parts:
                     continue
                 # Title-case the full name: "SCHURING Morris" or "Morris SCHURING"

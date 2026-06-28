@@ -52,7 +52,7 @@ def _compute_leaders(df: pd.DataFrame, race_start_date) -> tuple[pd.DataFrame, p
     return pd.DataFrame(overall_leaders), pd.DataFrame(class_leaders)
 
 
-def show_race_stats(df, race_start_date):
+def show_race_stats(df, race_start_date, series: str = ""):
     st.subheader("Race Statistics")
 
     overall_df, class_df = _compute_leaders(df, race_start_date)
@@ -94,6 +94,56 @@ def show_race_stats(df, race_start_date):
     if not stints.empty:
         top = stints.iloc[0]
         st.markdown(f"**Longest uninterrupted overall lead:** Car **{top['NUMBER']}** — **{int(top['laps_led'])} laps**")
+
+    # --- Overall laps led (GTWC only) ---
+    if series == "GTWC":
+        st.markdown("## Overall Laps Led")
+        st.caption("All cars treated as one group, regardless of driver class — mirrors the official lap chart.")
+
+        total_overall = overall_df["LAP_NUMBER"].nunique()
+
+        overall_car_stats = (
+            overall_df.groupby(["CAR_ID", "NUMBER"])
+            .agg(laps_led=("LAP_NUMBER", "count"), laps_range=("LAP_NUMBER", lambda x: laps_to_ranges(x.tolist())))
+            .reset_index()
+        )
+        overall_car_stats["% of Race"] = (overall_car_stats["laps_led"] / total_overall * 100).round(1)
+        overall_car_stats = overall_car_stats.sort_values("laps_led", ascending=False)
+
+        # Attach class and team for context
+        car_meta = (
+            df[["NUMBER", "CLASS", "TEAM", "MANUFACTURER"]]
+            .drop_duplicates("NUMBER")
+            .rename(columns={"NUMBER": "NUMBER"})
+        )
+        overall_car_stats = overall_car_stats.merge(car_meta, on="NUMBER", how="left")
+
+        _overall_car_display = overall_car_stats.rename(columns={
+            "NUMBER": "Car", "laps_led": "Laps Led", "laps_range": "Lap Ranges",
+            "CLASS": "Class", "TEAM": "Team", "MANUFACTURER": "Manufacturer",
+        })[["Car", "Class", "Team", "Manufacturer", "Laps Led", "Lap Ranges", "% of Race"]]
+
+        st.markdown("**By car**")
+        st.dataframe(_overall_car_display, width="stretch", hide_index=True)
+        chart_export_buttons(df=_overall_car_display, filename="overall_laps_led_by_car")
+
+        overall_driver_stats = (
+            overall_df.groupby(["CAR_ID", "NUMBER", "DRIVER_NAME"])
+            .agg(laps_led=("LAP_NUMBER", "count"), laps_range=("LAP_NUMBER", lambda x: laps_to_ranges(x.tolist())))
+            .reset_index()
+        )
+        overall_driver_stats["% of Race"] = (overall_driver_stats["laps_led"] / total_overall * 100).round(1)
+        overall_driver_stats = overall_driver_stats.sort_values("laps_led", ascending=False)
+        overall_driver_stats = overall_driver_stats.merge(car_meta[["NUMBER", "CLASS"]], on="NUMBER", how="left")
+
+        _overall_driver_display = overall_driver_stats.rename(columns={
+            "NUMBER": "Car", "DRIVER_NAME": "Driver", "laps_led": "Laps Led",
+            "laps_range": "Lap Ranges", "CLASS": "Class",
+        })[["Car", "Class", "Driver", "Laps Led", "Lap Ranges", "% of Race"]]
+
+        st.markdown("**By driver**")
+        st.dataframe(_overall_driver_display, width="stretch", hide_index=True)
+        chart_export_buttons(df=_overall_driver_display, filename="overall_laps_led_by_driver")
 
     # --- Laps led tables ---
     st.markdown("## Laps Led by Class")

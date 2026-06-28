@@ -447,48 +447,41 @@ def parse_entry_list(pdf_path: str) -> dict[str, dict]:
 
     result: dict[str, dict] = {}
 
+    # Column layout carried across pages — continuation pages often omit headers
+    hash_x: float = 104
+    cat_x: float  = 700
+    car_x: float  = 620
+    driver_xs: list[float] = []
+    lic_xs: list[float]    = []
+    layout_known: bool     = False
+
     for page in doc:
         words_raw = page.get_text("words")
         by_y: dict[int, list] = defaultdict(list)
         for x0, y0, x1, y1, text, *_ in words_raw:
             by_y[round(y0)].append((x0, text))
 
-        # ── Detect header row ──────────────────────────────────────────────────
+        # ── Detect header row (update layout if present) ───────────────────────
         # The header row contains "#", "TEAM", "CATEGORY" (and usually "DRIVER").
-        # We look for the row where all three appear close together.
         header_y = None
-        col: dict[str, float] = {}   # header-name → x position
-
         for y_key in sorted(by_y):
             row = sorted(by_y[y_key])
             texts = [t.upper() for _, t in row]
             if "#" in texts and "CATEGORY" in texts and "TEAM" in texts:
                 header_y = y_key
-                for x, t in row:
-                    col[t.upper()] = x
+                col: dict[str, float] = {t.upper(): x for x, t in row}
+                hash_x    = col.get("#", hash_x)
+                cat_x     = col.get("CATEGORY", cat_x)
+                car_x     = col.get("CAR", cat_x - 80)
+                driver_xs = sorted(x for x, t in row if t.upper() == "DRIVER")
+                lic_xs    = sorted(x for x, t in row if t.upper() == "LIC")
+                if not driver_xs:
+                    driver_xs = [hash_x + 60]
+                layout_known = True
                 break
 
-        if header_y is None:
-            continue  # no recognisable header on this page
-
-        # x boundaries for each column
-        hash_x = col.get("#", 104)
-        cat_x  = col.get("CATEGORY", 700)
-        car_x  = col.get("CAR", cat_x - 80)
-
-        # DRIVER columns: collect all x positions of "DRIVER" in the header row
-        driver_xs: list[float] = sorted(
-            x for x, t in sorted(by_y[header_y]) if t.upper() == "DRIVER"
-        )
-        if not driver_xs:
-            driver_xs = [hash_x + 60]
-
-        # LIC columns: each driver slot has a "LIC" header immediately after it.
-        # Using LIC x-positions as the RIGHT edge of each driver band ensures
-        # LIC codes (3-letter country codes) are not captured in name tokens.
-        lic_xs: list[float] = sorted(
-            x for x, t in sorted(by_y[header_y]) if t.upper() == "LIC"
-        )
+        if not layout_known:
+            continue  # no layout known yet — skip page
 
         # Build per-driver x-bands as (driver_x - 20, lic_x - 5).
         # Extending 20px left of the DRIVER header captures first-name tokens
@@ -506,7 +499,7 @@ def parse_entry_list(pdf_path: str) -> dict[str, dict]:
 
         # ── Parse data rows ────────────────────────────────────────────────────
         for y_key in sorted(by_y):
-            if y_key <= header_y:
+            if header_y is not None and y_key <= header_y:
                 continue
             row = sorted(by_y[y_key])
             if not row:

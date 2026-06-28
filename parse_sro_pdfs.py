@@ -641,73 +641,100 @@ def parse_top_speed_list(pdf_path: str) -> dict[str, dict]:
 
 # ─── Message List parser ───────────────────────────────────────────────────────
 
-_WALL_RE = re.compile(r'^\d{2}:\d{2}:\d{2}(?:\.\d+)?$')
+_WALL_RE = re.compile(r'^\d{1,2}:\d{2}:\d{2}(?:\.\d+)?$')
 _ELAPSED_RE = re.compile(r'^\d+:\d{2}(?::\d{2})?\.\d+$')
+
+# Message List column x-boundaries (from word position analysis)
+# TIME (wall clock) at x≈64, RACE TIME (elapsed) at x≈146, MESSAGE at x≈193
+_MSG_TIME_X_MAX = 120    # wall-clock time tokens: x < 120
+_MSG_ELAPSED_X_MAX = 190  # race-elapsed tokens: 120 ≤ x < 190
+# message tokens: x ≥ 190
 
 
 def parse_message_list(pdf_path: str) -> tuple[str, list]:
     """
-    Parse SRO Message List PDF (multi-line record format):
-        {wall_time}
-        [{race_elapsed}]   ← only present once race clock is running
-        {message text}
+    Parse SRO Message List PDF using word x-position to identify columns.
+
+    The three columns are:
+        TIME (wall clock)   x ≈ 64   → token x < 120
+        RACE TIME (elapsed) x ≈ 146  → token 120 ≤ x < 190
+        MESSAGE             x ≈ 193+ → token x ≥ 190
+
+    Each record occupies one or two y-rows. Grouping by y-row and splitting
+    by x-position handles 1-digit-hour wall times (e.g. "3:54:34.497") that
+    would fail a regex requiring exactly 2-digit hours.
 
     Returns (race_start_wall_str, [(start_s, end_s, flag_type), ...]).
     flag_type is "SC" or "FCY".
     """
     doc = fitz.open(pdf_path)
-    skip = {"Message List", "TIME", "RACE TIME", "MESSAGE"}
-    header_re = re.compile(
-        r'^(Autodromo|GTWorldChEU|Page \d|GT WorldChEU|ver:|Sunday,|printed:|'
-        r'\d{2}\.\d{1,2}\.\d{4})',
-        re.I,
-    )
+    DATA_Y_MIN = 140  # skip page header rows above this y
 
-    all_lines: list[str] = []
+    # Collect all word tokens with position from every page
+    all_records: list[tuple[str | None, str | None, str]] = []  # (wall, elapsed, msg)
+
     for page in doc:
-        for line in page.get_text().splitlines():
-            line = line.strip()
-            if not line or line in skip or header_re.match(line):
+        by_y: dict[int, list[tuple[float, str]]] = defaultdict(list)
+        for x0, y0, x1, y1, text, *_ in page.get_text("words"):
+            if y0 < DATA_Y_MIN:
                 continue
-            all_lines.append(line)
+            by_y[round(y0)].append((x0, text))
+
+        # Group consecutive y-rows that form one logical record.
+        # A new record starts when a y-row contains a wall-clock time token.
+        pending: dict[str, list[str]] = {"wall": [], "elapsed": [], "msg": []}
+
+        def flush(p: dict) -> tuple[str | None, str | None, str] | None:
+            wall_str = " ".join(p["wall"]).strip() if p["wall"] else None
+            elapsed_str = " ".join(p["elapsed"]).strip() if p["elapsed"] else None
+            msg_str = " ".join(p["msg"]).strip()
+            if not wall_str and not msg_str:
+                return None
+            return (wall_str, elapsed_str, msg_str)
+
+        for y_key in sorted(by_y.keys()):
+            row = sorted(by_y[y_key])
+            wall_tokens = [t for x, t in row if x < _MSG_TIME_X_MAX]
+            elapsed_tokens = [t for x, t in row if _MSG_TIME_X_MAX <= x < _MSG_ELAPSED_X_MAX]
+            msg_tokens = [t for x, t in row if x >= _MSG_ELAPSED_X_MAX]
+
+            row_has_wall = any(_WALL_RE.match(t) for t in wall_tokens)
+
+            if row_has_wall and (pending["wall"] or pending["msg"]):
+                rec = flush(pending)
+                if rec:
+                    all_records.append(rec)
+                pending = {"wall": [], "elapsed": [], "msg": []}
+
+            pending["wall"].extend(wall_tokens)
+            pending["elapsed"].extend(elapsed_tokens)
+            pending["msg"].extend(msg_tokens)
+
+        rec = flush(pending)
+        if rec:
+            all_records.append(rec)
 
     events: list[tuple[float, str]] = []
     race_start_wall = "16:00:00.000"
 
-    i = 0
-    while i < len(all_lines):
-        line = all_lines[i]
-        if not _WALL_RE.match(line):
-            i += 1
-            continue
-        wall_time = line
-        i += 1
-        elapsed_str = None
-        if i < len(all_lines) and _ELAPSED_RE.match(all_lines[i]):
-            elapsed_str = all_lines[i]
-            i += 1
-        # Collect message lines until next wall time
-        msg_parts: list[str] = []
-        while i < len(all_lines) and not _WALL_RE.match(all_lines[i]):
-            msg_parts.append(all_lines[i])
-            i += 1
-        msg = " ".join(msg_parts).upper()
+    for wall_str, elapsed_str, msg in all_records:
+        msg_upper = msg.upper()
         elapsed = parse_secs(elapsed_str) if elapsed_str else None
 
         # Race start: "Green flag" with no elapsed time = clock starts here
-        if "GREEN FLAG" == msg and elapsed is None:
-            race_start_wall = wall_time if "." in wall_time else wall_time + ".000"
+        if "GREEN FLAG" in msg_upper and elapsed is None and wall_str and _WALL_RE.match(wall_str):
+            race_start_wall = wall_str if "." in wall_str else wall_str + ".000"
 
         if elapsed is None:
             continue
 
-        if "SAFETY CAR DEPLOYED" in msg:
+        if "SAFETY CAR DEPLOYED" in msg_upper:
             events.append((elapsed, "SC_START"))
-        elif re.search(r'FULL COURSE YELLOW DEPLOYED|FCY DEPLOYED', msg):
+        elif re.search(r'FULL COURSE YELLOW DEPLOYED|FCY DEPLOYED', msg_upper):
             events.append((elapsed, "FCY_START"))
-        elif msg == "GREEN FLAG" or (msg.startswith("GREEN FLAG") and "AT M" not in msg):
+        elif "GREEN FLAG" in msg_upper and "AT M" not in msg_upper:
             events.append((elapsed, "GREEN"))
-        elif "END OF MINIMUM FCY DURATION" in msg:
+        elif "END OF MINIMUM FCY DURATION" in msg_upper:
             events.append((elapsed, "FCY_END_POSSIBLE"))
 
     windows: list[tuple[float, float, str]] = []
@@ -738,7 +765,7 @@ def flag_for_elapsed(elapsed_secs: float, windows: list) -> str:
     for start, end, flag_type in windows:
         if start <= elapsed_secs <= end:
             return flag_type
-    return "GF"
+    return "GREEN"
 
 
 # ─── Pit Stop List parser ──────────────────────────────────────────────────────

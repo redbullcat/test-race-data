@@ -25,10 +25,8 @@ def _compute_leaders(df: pd.DataFrame, race_start_date) -> tuple[pd.DataFrame, p
         # if it was leading. CROSSING_FINISH_LINE_IN_PIT = "B" means the car pitted
         # AFTER crossing, not that it didn't cross. Sorting by HOUR_DT (crossing time)
         # is the correct and only criterion for determining the lap leader.
-        flag_vals = lap_df["FLAG_AT_FL"].dropna().unique() if "FLAG_AT_FL" in lap_df.columns else []
-        flag = flag_vals[0] if len(flag_vals) == 1 else None
-
         overall_leader = lap_df.iloc[0]
+        flag = overall_leader.get("FLAG_AT_FL") if "FLAG_AT_FL" in lap_df.columns else None
 
         overall_leaders.append({
             "LAP_NUMBER": lap,

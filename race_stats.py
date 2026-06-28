@@ -81,8 +81,62 @@ def show_race_stats(df, race_start_date, series: str = "", df_full=None):
     # Flag laps
     if "FLAG_AT_FL" in overall_df.columns:
         st.markdown("**Laps by flag condition**")
-        for flag, count in overall_df["FLAG_AT_FL"].fillna("GREEN").replace("GF", "GREEN").value_counts().items():
-            st.write(f"- **{flag}**: {count} laps")
+        flag_counts = overall_df["FLAG_AT_FL"].fillna("GREEN").replace("GF", "GREEN").value_counts()
+        total_laps_flag = flag_counts.sum()
+        # Approximate time per flag: use mean lap time across all laps in that condition
+        mean_lap = overall_df.copy()
+        mean_lap["FLAG_AT_FL"] = mean_lap["FLAG_AT_FL"].fillna("GREEN").replace("GF", "GREEN")
+        if "LAP_TIME" in mean_lap.columns:
+            def _parse_laptime(s):
+                try:
+                    parts = str(s).split(":")
+                    return int(parts[0]) * 60 + float(parts[1]) if len(parts) == 2 else float(parts[0])
+                except Exception:
+                    return None
+            mean_lap["_lt_secs"] = mean_lap["LAP_TIME"].apply(_parse_laptime)
+            flag_mean_secs = mean_lap.groupby("FLAG_AT_FL")["_lt_secs"].mean()
+        else:
+            flag_mean_secs = {}
+        accounted_secs = 0.0
+        for flag, count in flag_counts.items():
+            pct = count / total_laps_flag * 100
+            avg_s = flag_mean_secs.get(flag)
+            if avg_s:
+                total_s = avg_s * count
+                accounted_secs += total_s
+                h = int(total_s // 3600)
+                m = int((total_s % 3600) // 60)
+                time_str = f"{h}h {m:02d}m" if h else f"{m}m"
+                st.write(f"- **{flag}**: {count} laps ({pct:.0f}%, ~{time_str})")
+            else:
+                st.write(f"- **{flag}**: {count} laps ({pct:.0f}%)")
+
+        # Derive actual race duration from the maximum elapsed time in the data
+        def _elapsed_to_secs(s):
+            try:
+                parts = str(s).split(":")
+                if len(parts) == 3:
+                    return int(parts[0]) * 3600 + int(parts[1]) * 60 + float(parts[2])
+                if len(parts) == 2:
+                    return int(parts[0]) * 60 + float(parts[1])
+            except Exception:
+                pass
+            return None
+
+        elapsed_secs_series = overall_df["ELAPSED"].map(_elapsed_to_secs).dropna() if "ELAPSED" in overall_df.columns else pd.Series(dtype=float)
+        race_dur_secs = elapsed_secs_series.max() if not elapsed_secs_series.empty else accounted_secs
+        # Round up to the nearest hour for display (e.g. 23:58 → "24h")
+        race_dur_h = round(race_dur_secs / 3600)
+        gap_secs = max(race_dur_h * 3600 - accounted_secs, 0)
+        acc_h = int(accounted_secs // 3600)
+        acc_m = int((accounted_secs % 3600) // 60)
+        gap_m = int(gap_secs // 60)
+        gap_s = int(gap_secs % 60)
+        st.caption(
+            f"Total accounted: ~{acc_h}h {acc_m:02d}m of {race_dur_h}h 00m — "
+            f"the remaining ~{gap_m}m {gap_s:02d}s is the leader's final incomplete lap "
+            f"(still circulating when the chequered flag fell)."
+        )
 
     # Longest lead stint
     overall_df["change"] = overall_df["CAR_ID"] != overall_df["CAR_ID"].shift()

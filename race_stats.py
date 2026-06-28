@@ -52,8 +52,12 @@ def _compute_leaders(df: pd.DataFrame, race_start_date) -> tuple[pd.DataFrame, p
     return pd.DataFrame(overall_leaders), pd.DataFrame(class_leaders)
 
 
-def show_race_stats(df, race_start_date, series: str = ""):
+def show_race_stats(df, race_start_date, series: str = "", df_full=None):
     st.subheader("Race Statistics")
+
+    # df_full is the unfiltered dataframe (all classes). Falls back to df if not provided.
+    if df_full is None:
+        df_full = df
 
     overall_df, class_df = _compute_leaders(df, race_start_date)
     if overall_df.empty:
@@ -100,10 +104,12 @@ def show_race_stats(df, race_start_date, series: str = ""):
         st.markdown("## Overall Laps Led")
         st.caption("All cars treated as one group, regardless of driver class — mirrors the official lap chart.")
 
-        total_overall = overall_df["LAP_NUMBER"].nunique()
+        # Use the unfiltered dataframe so all classes contribute to the overall leader each lap
+        all_overall_df, _ = _compute_leaders(df_full, race_start_date)
+        total_overall = all_overall_df["LAP_NUMBER"].nunique()
 
         overall_car_stats = (
-            overall_df.groupby(["CAR_ID", "NUMBER"])
+            all_overall_df.groupby(["CAR_ID", "NUMBER"])
             .agg(laps_led=("LAP_NUMBER", "count"), laps_range=("LAP_NUMBER", lambda x: laps_to_ranges(x.tolist())))
             .reset_index()
         )
@@ -112,9 +118,8 @@ def show_race_stats(df, race_start_date, series: str = ""):
 
         # Attach class and team for context
         car_meta = (
-            df[["NUMBER", "CLASS", "TEAM", "MANUFACTURER"]]
+            df_full[["NUMBER", "CLASS", "TEAM", "MANUFACTURER"]]
             .drop_duplicates("NUMBER")
-            .rename(columns={"NUMBER": "NUMBER"})
         )
         overall_car_stats = overall_car_stats.merge(car_meta, on="NUMBER", how="left")
 
@@ -128,7 +133,7 @@ def show_race_stats(df, race_start_date, series: str = ""):
         chart_export_buttons(df=_overall_car_display, filename="overall_laps_led_by_car")
 
         overall_driver_stats = (
-            overall_df.groupby(["CAR_ID", "NUMBER", "DRIVER_NAME"])
+            all_overall_df.groupby(["CAR_ID", "NUMBER", "DRIVER_NAME"])
             .agg(laps_led=("LAP_NUMBER", "count"), laps_range=("LAP_NUMBER", lambda x: laps_to_ranges(x.tolist())))
             .reset_index()
         )

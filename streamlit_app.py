@@ -452,7 +452,7 @@ with race_tab:
             from results_table import show_results_table
             from lap_position_chart import show_lap_position_chart
             if race_start_date:
-                show_race_stats(df, race_start_date, series=selected_series)
+                show_race_stats(df, race_start_date, series=selected_series, df_full=_df_race)
             show_results_table(df, TEAM_COLORS)
             show_lap_position_chart(df, TEAM_COLORS)
 

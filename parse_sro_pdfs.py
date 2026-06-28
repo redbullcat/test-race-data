@@ -164,14 +164,6 @@ def _is_time(text: str) -> bool:
                 re.match(r'^\d+:\d{2}:\d{2}\.\d+$', text))
 
 
-def _is_lap_row(tokens: list[str]) -> bool:
-    """Check if a list of tokens looks like the start of a lap record."""
-    if len(tokens) < 3:
-        return False
-    return (tokens[0].isdigit() and
-            tokens[1] in ("1", "2", "3") and
-            _is_time(tokens[2]))
-
 
 # ─── Sector List parser ────────────────────────────────────────────────────────
 

@@ -137,16 +137,30 @@ def page_words_by_column(page, mid_x: float | None = None):
     """
     Return (left_words, right_words) where each is a list of (y, x, text)
     sorted by (y, x).  mid_x defaults to half the page width.
+
+    Driver header rows (containing NAT(#N) tokens) span the full page width
+    when cars have 3-4 drivers.  Those rows are placed entirely in the left
+    column so that all driver names are captured regardless of their x position.
     """
     if mid_x is None:
         mid_x = page.rect.width / 2
-    left, right = [], []
+
+    # Group words by y-row first so we can inspect the whole row
+    by_y: dict[int, list] = defaultdict(list)
     for x0, y0, x1, y1, text, *_ in page.get_text("words"):
-        entry = (round(y0, 1), x0, text)
-        if x0 < mid_x:
-            left.append(entry)
-        else:
-            right.append(entry)
+        by_y[round(y0)].append((x0, text))
+
+    left, right = [], []
+    for y_key, row in by_y.items():
+        row_texts = [t for _, t in row]
+        is_header = any(re.search(r'\([#\d]+\)', t) for t in row_texts)
+        for x, text in row:
+            entry = (float(y_key), x, text)
+            if is_header or x < mid_x:
+                left.append(entry)
+            else:
+                right.append(entry)
+
     left.sort()
     right.sort()
     return left, right
@@ -256,11 +270,29 @@ def _parse_column_stream(
         row = sorted(rows[y_key])
         texts = [t for _, t in row]
 
-        if "besttime:" in texts or "besttime" in texts:
-            continue
-
         has_nat = any(re.search(r'\([#\d]+\)', t) for t in texts)
         first_is_int = bool(texts) and texts[0].isdigit()
+        has_besttime = "besttime:" in texts or "besttime" in texts
+
+        if has_besttime:
+            # Spa format: car header and besttime appear on the SAME row.
+            # Two sub-cases:
+            #   Format A+bt: "7 Drudi, SMR(#2) / ... theoretical besttime: 2:18.058"
+            #     → car num + drivers + besttime all on one row (has_nat=True, first_is_int=True)
+            #   Format B-simple: "0 theoretical besttime: 2:17.486"
+            #     → car num on besttime row, drivers buffered from previous row
+            if first_is_int:
+                current_car = texts[0]
+                if has_nat:
+                    new_drivers = _parse_driver_line(texts[1:])
+                else:
+                    new_drivers = dict(pending_drivers)
+                if current_car not in car_sections:
+                    car_sections[current_car] = {"drivers": new_drivers, "rows": []}
+                else:
+                    car_sections[current_car]["drivers"].update(new_drivers)
+            pending_drivers = {}
+            continue
 
         if has_nat and first_is_int:
             # Format A: "5 Rappange, NED(#1) / ..."  — car num + drivers on same row

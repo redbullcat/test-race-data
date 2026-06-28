@@ -97,17 +97,32 @@ def show_race_stats(df, race_start_date, series: str = "", df_full=None):
             flag_mean_secs = mean_lap.groupby("FLAG_AT_FL")["_lt_secs"].mean()
         else:
             flag_mean_secs = {}
+        accounted_secs = 0.0
         for flag, count in flag_counts.items():
             pct = count / total_laps_flag * 100
             avg_s = flag_mean_secs.get(flag)
             if avg_s:
                 total_s = avg_s * count
+                accounted_secs += total_s
                 h = int(total_s // 3600)
                 m = int((total_s % 3600) // 60)
                 time_str = f"{h}h {m:02d}m" if h else f"{m}m"
                 st.write(f"- **{flag}**: {count} laps ({pct:.0f}%, ~{time_str})")
             else:
                 st.write(f"- **{flag}**: {count} laps ({pct:.0f}%)")
+
+        # Show total accounted time vs race duration
+        race_dur_secs = 24 * 3600  # standard endurance race duration
+        gap_secs = race_dur_secs - accounted_secs
+        acc_h = int(accounted_secs // 3600)
+        acc_m = int((accounted_secs % 3600) // 60)
+        gap_m = int(gap_secs // 60)
+        gap_s = int(gap_secs % 60)
+        st.caption(
+            f"Total accounted: ~{acc_h}h {acc_m:02d}m of 24h 00m — "
+            f"the remaining ~{gap_m}m {gap_s:02d}s is the leader's final incomplete lap "
+            f"(still circulating when the chequered flag fell)."
+        )
 
     # Longest lead stint
     overall_df["change"] = overall_df["CAR_ID"] != overall_df["CAR_ID"].shift()

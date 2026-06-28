@@ -111,15 +111,29 @@ def show_race_stats(df, race_start_date, series: str = "", df_full=None):
             else:
                 st.write(f"- **{flag}**: {count} laps ({pct:.0f}%)")
 
-        # Show total accounted time vs race duration
-        race_dur_secs = 24 * 3600  # standard endurance race duration
-        gap_secs = race_dur_secs - accounted_secs
+        # Derive actual race duration from the maximum elapsed time in the data
+        def _elapsed_to_secs(s):
+            try:
+                parts = str(s).split(":")
+                if len(parts) == 3:
+                    return int(parts[0]) * 3600 + int(parts[1]) * 60 + float(parts[2])
+                if len(parts) == 2:
+                    return int(parts[0]) * 60 + float(parts[1])
+            except Exception:
+                pass
+            return None
+
+        elapsed_secs_series = overall_df["ELAPSED"].map(_elapsed_to_secs).dropna() if "ELAPSED" in overall_df.columns else pd.Series(dtype=float)
+        race_dur_secs = elapsed_secs_series.max() if not elapsed_secs_series.empty else accounted_secs
+        # Round up to the nearest hour for display (e.g. 23:58 → "24h")
+        race_dur_h = round(race_dur_secs / 3600)
+        gap_secs = max(race_dur_h * 3600 - accounted_secs, 0)
         acc_h = int(accounted_secs // 3600)
         acc_m = int((accounted_secs % 3600) // 60)
         gap_m = int(gap_secs // 60)
         gap_s = int(gap_secs % 60)
         st.caption(
-            f"Total accounted: ~{acc_h}h {acc_m:02d}m of 24h 00m — "
+            f"Total accounted: ~{acc_h}h {acc_m:02d}m of {race_dur_h}h 00m — "
             f"the remaining ~{gap_m}m {gap_s:02d}s is the leader's final incomplete lap "
             f"(still circulating when the chequered flag fell)."
         )

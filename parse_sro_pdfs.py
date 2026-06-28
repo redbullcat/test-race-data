@@ -728,13 +728,15 @@ def parse_message_list(pdf_path: str) -> tuple[str, list]:
         if elapsed is None:
             continue
 
+        # Multiple flag events can appear in a single concatenated message record.
+        # Check all conditions independently (not elif) so compound records fire correctly.
         if "SAFETY CAR DEPLOYED" in msg_upper:
             events.append((elapsed, "SC_START"))
-        elif re.search(r'FULL COURSE YELLOW DEPLOYED|FCY DEPLOYED', msg_upper):
+        if re.search(r'FULL COURSE YELLOW DEPLOYED|FCY DEPLOYED', msg_upper):
             events.append((elapsed, "FCY_START"))
-        elif "GREEN FLAG" in msg_upper and "AT M" not in msg_upper:
+        if re.search(r'\bGREEN FLAG\b(?! AT M)', msg_upper):
             events.append((elapsed, "GREEN"))
-        elif "END OF MINIMUM FCY DURATION" in msg_upper:
+        if "END OF MINIMUM FCY DURATION" in msg_upper:
             events.append((elapsed, "FCY_END_POSSIBLE"))
 
     windows: list[tuple[float, float, str]] = []

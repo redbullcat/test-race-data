@@ -81,8 +81,33 @@ def show_race_stats(df, race_start_date, series: str = "", df_full=None):
     # Flag laps
     if "FLAG_AT_FL" in overall_df.columns:
         st.markdown("**Laps by flag condition**")
-        for flag, count in overall_df["FLAG_AT_FL"].fillna("GREEN").replace("GF", "GREEN").value_counts().items():
-            st.write(f"- **{flag}**: {count} laps")
+        flag_counts = overall_df["FLAG_AT_FL"].fillna("GREEN").replace("GF", "GREEN").value_counts()
+        total_laps_flag = flag_counts.sum()
+        # Approximate time per flag: use mean lap time across all laps in that condition
+        mean_lap = overall_df.copy()
+        mean_lap["FLAG_AT_FL"] = mean_lap["FLAG_AT_FL"].fillna("GREEN").replace("GF", "GREEN")
+        if "LAP_TIME" in mean_lap.columns:
+            def _parse_laptime(s):
+                try:
+                    parts = str(s).split(":")
+                    return int(parts[0]) * 60 + float(parts[1]) if len(parts) == 2 else float(parts[0])
+                except Exception:
+                    return None
+            mean_lap["_lt_secs"] = mean_lap["LAP_TIME"].apply(_parse_laptime)
+            flag_mean_secs = mean_lap.groupby("FLAG_AT_FL")["_lt_secs"].mean()
+        else:
+            flag_mean_secs = {}
+        for flag, count in flag_counts.items():
+            pct = count / total_laps_flag * 100
+            avg_s = flag_mean_secs.get(flag)
+            if avg_s:
+                total_s = avg_s * count
+                h = int(total_s // 3600)
+                m = int((total_s % 3600) // 60)
+                time_str = f"{h}h {m:02d}m" if h else f"{m}m"
+                st.write(f"- **{flag}**: {count} laps ({pct:.0f}%, ~{time_str})")
+            else:
+                st.write(f"- **{flag}**: {count} laps ({pct:.0f}%)")
 
     # Longest lead stint
     overall_df["change"] = overall_df["CAR_ID"] != overall_df["CAR_ID"].shift()

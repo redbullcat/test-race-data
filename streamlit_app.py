@@ -169,6 +169,26 @@ with st.sidebar:
     sections = ["🏁 Race Weekend", "🔧 Tests", "📅 Season"]
     section  = st.radio("Section", sections, label_visibility="collapsed")
 
+    # ── Session + class selectors (race weekend only) ────────────────────────
+    _sidebar_session      = None
+    _sidebar_class_filter = None
+    if section == "🏁 Race Weekend" and selected_event is not None:
+        _ev_sessions = all_events.get(selected_event, {})
+        _available_sessions = []
+        if "practice"   in _ev_sessions: _available_sessions.append("Practice")
+        if "qualifying" in _ev_sessions: _available_sessions.append("Qualifying")
+        if "race"       in _ev_sessions: _available_sessions.append("Race")
+
+        if _available_sessions:
+            st.divider()
+            _default_session = "Race" if "Race" in _available_sessions else _available_sessions[-1]
+            _sidebar_session = st.radio(
+                "Session",
+                _available_sessions,
+                index=_available_sessions.index(_default_session),
+                key="sidebar_session",
+            )
+
 # ---------------------------------------------------------------------------
 # Update URL params
 # ---------------------------------------------------------------------------
@@ -328,18 +348,24 @@ if not race_weekend_events or selected_event is None:
 
 event_sessions = race_weekend_events[selected_event]
 event_display  = format_event(selected_event)
-st.title(f"🏁 {selected_year} {selected_series_display} — {event_display}")
-
-# ---------------------------------------------------------------------------
-# Race data loading
-# ---------------------------------------------------------------------------
 has_practice   = "practice"   in event_sessions
 has_qualifying = "qualifying" in event_sessions
 has_race       = "race"       in event_sessions
 
+# Resolve which session to show (sidebar radio, or fallback to what's available)
+_session = _sidebar_session or ("Race" if has_race else "Qualifying" if has_qualifying else "Practice")
+
+st.title(f"🏁 {selected_year} {selected_series_display} — {event_display}")
+st.caption(f"Session: **{_session}**")
+
+# ---------------------------------------------------------------------------
+# Race data loading (only when Race session is selected or live mode)
+# ---------------------------------------------------------------------------
 _df_race         = None
 _race_start_date = None
 _classes         = []
+
+_need_race_data = (_session == "Race") or (_live_mode and _live_available)
 
 if _live_mode and _live_available:
     with st.spinner("Loading live race data…"):
@@ -364,7 +390,7 @@ if _live_mode and _live_available:
         st.warning("Live database found but no laps yet — waiting for data…")
         _df_race = None
 
-elif has_race:
+elif _session == "Race" and has_race:
     _race_session_dir = os.path.join(DATA_DIR, selected_series, selected_year, selected_event, "race")
     _race_files       = event_sessions["race"]
     _race_file_path   = os.path.join(_race_session_dir, _race_files[0])
@@ -374,42 +400,34 @@ elif has_race:
     _classes = sorted(_df_race["CLASS"].dropna().unique())
 
 # ---------------------------------------------------------------------------
-# Shared class selector
+# Class filter in sidebar (race only — added after data is loaded)
 # ---------------------------------------------------------------------------
 _selected_class_filter = None
 _df_filtered = _df_race
 
-if _df_race is not None and len(_classes) > 1:
-    top_class = default_class(selected_series, list(_classes))
-    class_options     = ["All classes"] + list(_classes)
-    default_class_idx = class_options.index(top_class) if top_class in class_options else 0
-    _selected_class_filter = st.selectbox(
-        "Class", class_options, index=default_class_idx, key="race_class_filter"
-    )
-    _df_filtered = (
-        _df_race[_df_race["CLASS"] == _selected_class_filter].copy()
-        if _selected_class_filter != "All classes"
-        else _df_race
-    )
-elif _df_race is not None and len(_classes) == 1:
-    _selected_class_filter = _classes[0]
+if _session == "Race" and _df_race is not None:
+    if len(_classes) > 1:
+        top_class = default_class(selected_series, list(_classes))
+        class_options     = ["All classes"] + list(_classes)
+        default_class_idx = class_options.index(top_class) if top_class in class_options else 0
+        with st.sidebar:
+            st.divider()
+            _selected_class_filter = st.selectbox(
+                "Class", class_options, index=default_class_idx, key="race_class_filter"
+            )
+        _df_filtered = (
+            _df_race[_df_race["CLASS"] == _selected_class_filter].copy()
+            if _selected_class_filter != "All classes"
+            else _df_race
+        )
+    elif len(_classes) == 1:
+        _selected_class_filter = _classes[0]
 
 # ---------------------------------------------------------------------------
-# Race Weekend tabs
+# Session dispatch
 # ---------------------------------------------------------------------------
-def tab_label(label: str, available: bool) -> str:
-    return label if available else f"{label} (no data)"
 
-tab_labels = [
-    tab_label("Practice",   has_practice),
-    tab_label("Qualifying", has_qualifying),
-    tab_label("Race",       has_race),
-]
-
-practice_tab, qualifying_tab, race_tab = st.tabs(tab_labels)
-
-# ── Practice ────────────────────────────────────────────────────────────────
-with practice_tab:
+if _session == "Practice":
     if not has_practice:
         st.info("No practice data available for this event.")
     else:
@@ -418,8 +436,7 @@ with practice_tab:
         from _pages.practice import show_practice
         show_practice(session_dir=session_dir, session_files=session_files, team_colors=TEAM_COLORS)
 
-# ── Qualifying ──────────────────────────────────────────────────────────────
-with qualifying_tab:
+elif _session == "Qualifying":
     if not has_qualifying:
         st.info("No qualifying data available for this event.")
     else:
@@ -428,121 +445,20 @@ with qualifying_tab:
         from _pages.qualifying import show_qualifying
         show_qualifying(session_dir=session_dir, session_files=session_files, team_colors=TEAM_COLORS)
 
-# ── Race ────────────────────────────────────────────────────────────────────
-with race_tab:
-    if _live_mode and (_df_filtered is None or (_df_filtered is not None and _df_filtered.empty)):
+elif _session == "Race":
+    if _live_mode and (_df_filtered is None or _df_filtered.empty):
         st.info("Live mode active — waiting for race data.")
     elif not has_race and not _live_mode:
         st.info("No race data available for this event.")
     elif _df_filtered is None or _df_filtered.empty:
         st.warning("No data for the selected class.")
     else:
-        df = _df_filtered
-        race_start_date = _race_start_date
-
-        if race_start_date is None and not _live_mode:
-            st.warning(
-                "Race start date not in filename — gap evolution unavailable. "
-                "Run `add_dates_to_race_files.py` to fix."
-            )
-
-        results_tab, pace_tab, battle_tab, story_tab, analysis_tab, team_tab = st.tabs([
-            "Results", "Pace", "Battle", "Story", "Analysis", "Team by team"
-        ])
-
-        with results_tab:
-            from race_stats import show_race_stats
-            from results_table import show_results_table
-            from lap_position_chart import show_lap_position_chart
-            if race_start_date:
-                show_race_stats(df, race_start_date, series=selected_series, df_full=_df_race)
-            show_results_table(df, TEAM_COLORS)
-            show_lap_position_chart(df, TEAM_COLORS)
-
-        with pace_tab:
-            from pace_chart import show_pace_chart
-            from driver_pace_chart import show_driver_pace_chart
-            from driver_pace_comparison_chart import show_driver_pace_comparison
-            from stint_pace_chart import show_stint_pace_chart
-            from pace_consistency_chart import show_pace_consistency_chart
-            from race_pace_distribution import show_race_pace_distribution
-
-            pace_sections = st.tabs([
-                "Distribution", "Average Pace", "Consistency",
-                "By Driver", "Driver Comparison", "Stint Pace",
-            ])
-            with pace_sections[0]:
-                show_race_pace_distribution(df, TEAM_COLORS, key_prefix="race_rpd")
-            with pace_sections[1]:
-                show_pace_chart(df, TEAM_COLORS)
-            with pace_sections[2]:
-                show_pace_consistency_chart(df, TEAM_COLORS)
-            with pace_sections[3]:
-                show_driver_pace_chart(df, TEAM_COLORS)
-            with pace_sections[4]:
-                show_driver_pace_comparison(df, TEAM_COLORS)
-            with pace_sections[5]:
-                show_stint_pace_chart(df, TEAM_COLORS)
-
-        with battle_tab:
-            from gap_evolution_chart import get_filtered_race_data, show_gap_evolution_chart, show_cumulative_time_chart
-            from manufacturer_battle import show_manufacturer_battle
-
-            battle_sections = st.tabs(["Gap Evolution", "Manufacturer Battle"])
-
-            with battle_sections[0]:
-                if race_start_date is None and not _live_mode:
-                    st.info("Gap evolution requires a race start date in the filename.")
-                else:
-                    if st.button("Generate gap evolution", key="gap_trigger"):
-                        st.session_state["gap_active"] = True
-                    if st.session_state.get("gap_active"):
-                        filtered_df, selected_class, selected_cars, lap_range = get_filtered_race_data(
-                            df, race_start_date
-                        )
-                        if filtered_df is not None:
-                            show_gap_evolution_chart(filtered_df, TEAM_COLORS, selected_class, selected_cars)
-                            show_cumulative_time_chart(filtered_df, TEAM_COLORS, selected_class, selected_cars)
-                    else:
-                        st.info("Click 'Generate gap evolution' to load the chart.")
-
-            with battle_sections[1]:
-                show_manufacturer_battle(df, TEAM_COLORS, key_prefix="race_mfr")
-
-        with story_tab:
-            from story_chart import show_story
-            show_story(df, TEAM_COLORS, race_start_date)
-
-        with analysis_tab:
-            from tyre_deg_chart import show_tyre_deg_chart
-            from pit_delta_chart import show_pit_delta_chart
-            from strategy_chart import show_strategy_chart
-            from sector_analysis import show_sector_analysis
-            from top_speed_chart import show_top_speed_chart
-
-            analysis_sections = st.tabs([
-                "Strategy", "Tyre Degradation", "Pit Stops",
-                "Sector Analysis", "Top Speed",
-            ])
-
-            with analysis_sections[0]:
-                show_strategy_chart(df, TEAM_COLORS)
-
-            with analysis_sections[1]:
-                show_tyre_deg_chart(df, TEAM_COLORS)
-
-            with analysis_sections[2]:
-                show_pit_delta_chart(df, TEAM_COLORS)
-
-            with analysis_sections[3]:
-                show_sector_analysis(df, TEAM_COLORS, key_prefix="race_sec")
-
-            with analysis_sections[4]:
-                show_top_speed_chart(df, TEAM_COLORS, key_prefix="race_ts")
-
-        with team_tab:
-            from driver_stint_chart import show_driver_stint_chart
-            from _pages.team_by_team import show_team_by_team
-            show_driver_stint_chart(df, TEAM_COLORS)
-            st.divider()
-            show_team_by_team(df, TEAM_COLORS)
+        from _pages.race import show_race
+        show_race(
+            df=_df_filtered,
+            df_full=_df_race,
+            race_start_date=_race_start_date,
+            team_colors=TEAM_COLORS,
+            selected_series=selected_series,
+            live_mode=_live_mode,
+        )

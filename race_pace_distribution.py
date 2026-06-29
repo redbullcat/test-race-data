@@ -17,6 +17,15 @@ from utils import (
 )
 
 
+def _hex_to_rgba(hex_color: str, alpha: float = 0.33) -> str:
+    """Convert a #rrggbb hex string to an rgba() string with the given alpha."""
+    h = hex_color.lstrip("#")
+    if len(h) == 3:
+        h = "".join(c * 2 for c in h)
+    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    return f"rgba({r},{g},{b},{alpha})"
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -133,7 +142,7 @@ def show_race_pace_distribution(
             name=str(number),
             marker_color=color,
             line=dict(color=color, width=1.5),
-            fillcolor=color + "55",   # 33% opacity fill
+            fillcolor=_hex_to_rgba(color, 0.33),
             boxpoints=False,
             whiskerwidth=0.6,
             hovertemplate=(

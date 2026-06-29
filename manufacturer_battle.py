@@ -16,6 +16,14 @@ from utils import (
 )
 from theme import RED
 
+
+def _hex_to_rgba(hex_color: str, alpha: float = 0.33) -> str:
+    h = hex_color.lstrip("#")
+    if len(h) == 3:
+        h = "".join(c * 2 for c in h)
+    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    return f"rgba({r},{g},{b},{alpha})"
+
 # Colour palette distinct from team colours (qualitative set)
 _MFR_COLORS = [
     "#E00000", "#00C4FF", "#B4E600", "#FF6B00", "#9B59B6",
@@ -153,7 +161,7 @@ def _show_manufacturer_pace(df: pd.DataFrame, cmap: dict, key_prefix: str) -> No
             name=mfr,
             marker_color=color,
             line=dict(color=color, width=1.5),
-            fillcolor=color + "55",
+            fillcolor=_hex_to_rgba(color, 0.33),
             boxpoints="outliers",
             hovertemplate=f"<b>{mfr}</b><br>%{{y:.3f}}s<extra></extra>",
         ))

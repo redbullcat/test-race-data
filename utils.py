@@ -148,16 +148,36 @@ def _team_fallback_color(team: str) -> str:
     return f"#{int(r*255):02x}{int(g*255):02x}{int(b*255):02x}"
 
 
+def _ensure_readable(hex_color: str, min_luminance: float = 0.06) -> str:
+    """Lighten any hex colour that is too dark to read on a dark background.
+
+    Preserves hue and saturation; only raises lightness enough to meet the
+    minimum relative luminance threshold (~mid-dark grey equivalent).
+    Toyota's #100100 has luminance ~0.0003 and gets lifted to a dark red.
+    """
+    h = hex_color.lstrip("#")
+    if len(h) == 3:
+        h = "".join(c * 2 for c in h)
+    r, g, b = int(h[0:2], 16) / 255, int(h[2:4], 16) / 255, int(h[4:6], 16) / 255
+    luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
+    if luminance >= min_luminance:
+        return hex_color
+    hue, _, sat = colorsys.rgb_to_hls(r, g, b)
+    r2, g2, b2 = colorsys.hls_to_rgb(hue, 0.35, max(sat, 0.6))
+    return f"#{int(r2*255):02x}{int(g2*255):02x}{int(b2*255):02x}"
+
+
 def get_team_color(team: str, team_colors: dict) -> str:
     """
     Fuzzy-match a team name against the team_colors dict.
     Falls back to a deterministic colour derived from the team name so
     every team gets a unique, consistent colour across all charts.
+    Always returns a colour readable on a dark background.
     """
     team_lower = str(team).lower()
     for key, color in team_colors.items():
         if key.lower() in team_lower:
-            return color
+            return _ensure_readable(color)
     return _team_fallback_color(str(team))
 
 

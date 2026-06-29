@@ -84,12 +84,14 @@ def show_top_speed_chart(
             ),
         ))
 
+    cars_y_order = [str(r["NUMBER"]) for _, r in max_speed.iterrows()]  # ascending by max speed
     x_floor = max_speed["Max"].min() * 0.994
     x_ceil  = max_speed["Max"].max() * 1.006
     apply_dark_layout(
         fig_bar,
         title=f"Max Top Speed by Car — {session_label}",
         xaxis=dict(title="Speed (km/h)", range=[x_floor, x_ceil]),
+        yaxis=dict(type="category", categoryorder="array", categoryarray=cars_y_order),
         height=max(320, len(max_speed) * 22),
         showlegend=False,
     )

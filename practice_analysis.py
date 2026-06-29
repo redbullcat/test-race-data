@@ -25,7 +25,7 @@ def _parse_elapsed_secs(val) -> float | None:
 
 
 @st.cache_data(show_spinner=False)
-def _session_durations_by_name(files_tuple: tuple) -> dict[str, float]:
+def session_durations_by_name(files_tuple: tuple) -> dict[str, float]:
     """Compute session duration in minutes, keyed by filename."""
     durations = {}
     for filename, path in files_tuple:
@@ -44,7 +44,7 @@ def _session_durations_by_name(files_tuple: tuple) -> dict[str, float]:
 
 
 @st.cache_data(show_spinner=False)
-def _longest_stints(df: pd.DataFrame) -> pd.DataFrame:
+def longest_stints(df: pd.DataFrame) -> pd.DataFrame:
     """Compute the longest continuous no-pit stint per car across all sessions."""
     rows = []
 
@@ -124,7 +124,7 @@ def show_practice_analysis(
     files_map = {f: os.path.join(session_dir, f) for f in session_files}
 
     # Compute session durations (cached) — keyed by filename
-    durations = _session_durations_by_name(tuple(files_map.items()))
+    durations = session_durations_by_name(tuple(files_map.items()))
 
     # Session selector
     st.markdown("### Session Selection")
@@ -169,7 +169,7 @@ def show_practice_analysis(
     c4.metric("Drivers", df["DRIVER_NAME"].nunique())
     st.divider()
 
-    longest_stints_df = _longest_stints(df)
+    longest_stints_df = longest_stints(df)
 
     with st.expander("Fastest Laps", expanded=True):
         show_practice_fastest_laps(df)

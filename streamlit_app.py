@@ -465,32 +465,49 @@ with race_tab:
             from driver_pace_comparison_chart import show_driver_pace_comparison
             from stint_pace_chart import show_stint_pace_chart
             from pace_consistency_chart import show_pace_consistency_chart
-            show_pace_chart(df, TEAM_COLORS)
-            st.divider()
-            show_pace_consistency_chart(df, TEAM_COLORS)
-            st.divider()
-            show_driver_pace_chart(df, TEAM_COLORS)
-            st.divider()
-            show_driver_pace_comparison(df, TEAM_COLORS)
-            st.divider()
-            show_stint_pace_chart(df, TEAM_COLORS)
+            from race_pace_distribution import show_race_pace_distribution
+
+            pace_sections = st.tabs([
+                "Distribution", "Average Pace", "Consistency",
+                "By Driver", "Driver Comparison", "Stint Pace",
+            ])
+            with pace_sections[0]:
+                show_race_pace_distribution(df, TEAM_COLORS, key_prefix="race_rpd")
+            with pace_sections[1]:
+                show_pace_chart(df, TEAM_COLORS)
+            with pace_sections[2]:
+                show_pace_consistency_chart(df, TEAM_COLORS)
+            with pace_sections[3]:
+                show_driver_pace_chart(df, TEAM_COLORS)
+            with pace_sections[4]:
+                show_driver_pace_comparison(df, TEAM_COLORS)
+            with pace_sections[5]:
+                show_stint_pace_chart(df, TEAM_COLORS)
 
         with battle_tab:
             from gap_evolution_chart import get_filtered_race_data, show_gap_evolution_chart, show_cumulative_time_chart
-            if race_start_date is None and not _live_mode:
-                st.info("Gap evolution requires a race start date in the filename.")
-            else:
-                if st.button("Generate gap evolution", key="gap_trigger"):
-                    st.session_state["gap_active"] = True
-                if st.session_state.get("gap_active"):
-                    filtered_df, selected_class, selected_cars, lap_range = get_filtered_race_data(
-                        df, race_start_date
-                    )
-                    if filtered_df is not None:
-                        show_gap_evolution_chart(filtered_df, TEAM_COLORS, selected_class, selected_cars)
-                        show_cumulative_time_chart(filtered_df, TEAM_COLORS, selected_class, selected_cars)
+            from manufacturer_battle import show_manufacturer_battle
+
+            battle_sections = st.tabs(["Gap Evolution", "Manufacturer Battle"])
+
+            with battle_sections[0]:
+                if race_start_date is None and not _live_mode:
+                    st.info("Gap evolution requires a race start date in the filename.")
                 else:
-                    st.info("Click 'Generate gap evolution' to load the chart.")
+                    if st.button("Generate gap evolution", key="gap_trigger"):
+                        st.session_state["gap_active"] = True
+                    if st.session_state.get("gap_active"):
+                        filtered_df, selected_class, selected_cars, lap_range = get_filtered_race_data(
+                            df, race_start_date
+                        )
+                        if filtered_df is not None:
+                            show_gap_evolution_chart(filtered_df, TEAM_COLORS, selected_class, selected_cars)
+                            show_cumulative_time_chart(filtered_df, TEAM_COLORS, selected_class, selected_cars)
+                    else:
+                        st.info("Click 'Generate gap evolution' to load the chart.")
+
+            with battle_sections[1]:
+                show_manufacturer_battle(df, TEAM_COLORS, key_prefix="race_mfr")
 
         with story_tab:
             from story_chart import show_story
@@ -500,8 +517,13 @@ with race_tab:
             from tyre_deg_chart import show_tyre_deg_chart
             from pit_delta_chart import show_pit_delta_chart
             from strategy_chart import show_strategy_chart
+            from sector_analysis import show_sector_analysis
+            from top_speed_chart import show_top_speed_chart
 
-            analysis_sections = st.tabs(["Strategy", "Tyre Degradation", "Pit Stops"])
+            analysis_sections = st.tabs([
+                "Strategy", "Tyre Degradation", "Pit Stops",
+                "Sector Analysis", "Top Speed",
+            ])
 
             with analysis_sections[0]:
                 show_strategy_chart(df, TEAM_COLORS)
@@ -511,6 +533,12 @@ with race_tab:
 
             with analysis_sections[2]:
                 show_pit_delta_chart(df, TEAM_COLORS)
+
+            with analysis_sections[3]:
+                show_sector_analysis(df, TEAM_COLORS, key_prefix="race_sec")
+
+            with analysis_sections[4]:
+                show_top_speed_chart(df, TEAM_COLORS, key_prefix="race_ts")
 
         with team_tab:
             from driver_stint_chart import show_driver_stint_chart

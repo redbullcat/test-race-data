@@ -15,6 +15,10 @@ from practice_fastest_runs import show_practice_fastest_runs
 from practice_team_run_analysis import show_practice_team_run_analysis
 from practice_average_long_run_pace import show_practice_average_long_run_pace
 from practice_team_avg_pace import show_practice_team_avg_pace
+from race_pace_distribution import show_race_pace_distribution
+from sector_analysis import show_sector_analysis
+from manufacturer_battle import show_manufacturer_battle
+from top_speed_chart import show_top_speed_chart
 
 def _parse_elapsed_secs(val) -> float | None:
     return lap_to_seconds(val)
@@ -188,3 +192,18 @@ def show_practice_analysis(
 
     with st.expander("Team Average Pace", expanded=False):
         show_practice_team_avg_pace(df, team_colors, key_prefix=key_prefix)
+
+    # ── New analysis sections ────────────────────────────────────────────────
+    with st.expander("Pace Distribution", expanded=False):
+        show_race_pace_distribution(df, team_colors, key_prefix=f"{key_prefix}_pd",
+                                    session_label="Session")
+
+    with st.expander("Sector Analysis", expanded=False):
+        show_sector_analysis(df, team_colors, key_prefix=f"{key_prefix}_sec")
+
+    with st.expander("Manufacturer Battle", expanded=False):
+        show_manufacturer_battle(df, team_colors, key_prefix=f"{key_prefix}_mfr")
+
+    with st.expander("Top Speed", expanded=False):
+        show_top_speed_chart(df, team_colors, key_prefix=f"{key_prefix}_ts",
+                             session_label="Session")

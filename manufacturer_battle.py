@@ -190,11 +190,21 @@ def _show_manufacturer_speed(df: pd.DataFrame, cmap: dict, key_prefix: str) -> N
         st.info("No top speed values found.")
         return
 
-    # 3×IQR outlier filter (same logic as top_speed_chart)
-    q1, q3 = dff["TOP_SPEED"].quantile(0.25), dff["TOP_SPEED"].quantile(0.75)
-    cap = q3 + 3.0 * (q3 - q1)
-    removed_mfr = dff[dff["TOP_SPEED"] > cap]
-    dff = dff[dff["TOP_SPEED"] <= cap]
+    # 3×IQR outlier filter applied per class so mixed-class data doesn't
+    # widen the fence and miss within-class spikes.
+    removed_mfr = []
+    clean_parts = []
+    class_col = "CLASS" if "CLASS" in dff.columns else None
+    groups = dff.groupby(class_col) if class_col else [("all", dff)]
+    _caps: dict[str, float] = {}
+    for cls, grp in groups:
+        q1, q3 = grp["TOP_SPEED"].quantile(0.25), grp["TOP_SPEED"].quantile(0.75)
+        cap = q3 + 3.0 * (q3 - q1)
+        _caps[str(cls)] = round(cap, 1)
+        removed_mfr.append(grp[grp["TOP_SPEED"] > cap])
+        clean_parts.append(grp[grp["TOP_SPEED"] <= cap])
+    removed_mfr = pd.concat(removed_mfr) if removed_mfr else pd.DataFrame()
+    dff = pd.concat(clean_parts) if clean_parts else dff
 
     stats = (
         dff.groupby("MANUFACTURER")
@@ -249,9 +259,11 @@ def _show_manufacturer_speed(df: pd.DataFrame, cmap: dict, key_prefix: str) -> N
         notes = []
         for _, r in removed_mfr.iterrows():
             lap = int(r["LAP_NUMBER"]) if "LAP_NUMBER" in r and pd.notna(r.get("LAP_NUMBER")) else "—"
+            cls_key = str(r["CLASS"]) if class_col and "CLASS" in r else "all"
+            threshold = _caps.get(cls_key, "—")
             notes.append(
-                f"Car #{r['NUMBER']} ({r['MANUFACTURER']}), lap {lap}: "
+                f"Car #{r['NUMBER']} ({r.get('MANUFACTURER', '—')}), lap {lap}: "
                 f"**{r['TOP_SPEED']:.1f} km/h** removed — "
-                f"exceeds 3×IQR outlier threshold ({cap:.1f} km/h) and is likely a timing system error."
+                f"exceeds 3×IQR outlier threshold ({threshold} km/h) and is likely a timing system error."
             )
         st.caption("\\* Outlier readings removed: " + " | ".join(notes))

@@ -155,6 +155,7 @@ def show_race_pace_distribution(
     apply_dark_layout(
         fig_box,
         title=f"{session_label} Pace — Distribution by Car",
+        xaxis=dict(type="category", categoryorder="array", categoryarray=[str(n) for n in median_order]),
         yaxis=yaxis,
         height=480,
         showlegend=False,
@@ -208,6 +209,7 @@ def show_race_pace_distribution(
     apply_dark_layout(
         fig_strip,
         title=f"{session_label} Lap Times — Individual Laps",
+        xaxis=dict(type="category", categoryorder="array", categoryarray=[str(n) for n in median_order]),
         yaxis=yaxis,
         height=480,
         showlegend=False,

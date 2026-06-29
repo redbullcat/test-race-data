@@ -119,7 +119,7 @@ def _show_sector_comparison(df: pd.DataFrame, team_colors: dict, key_prefix: str
 
     fig.update_layout(barmode="group")
     apply_dark_layout(fig, title="Best Sector Times by Car", height=400)
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
     chart_export_buttons(fig=fig, filename=f"{key_prefix}_sector_comparison", height=400)
 
 
@@ -175,7 +175,7 @@ def _show_theoretical_best(df: pd.DataFrame, team_colors: dict, key_prefix: str)
         yaxis=dict(range=[y_min, y_max]),
         height=420,
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
     chart_export_buttons(fig=fig, filename=f"{key_prefix}_theoretical_best", height=420)
 
     # Table
@@ -187,7 +187,7 @@ def _show_theoretical_best(df: pd.DataFrame, team_colors: dict, key_prefix: str)
         disp.rename(columns={"NUMBER": "Car", "TEAM": "Team"})[
             ["Car", "Team", "Theoretical", "Actual", "Gap"]
         ],
-        hide_index=True, use_container_width=True,
+        hide_index=True, width="stretch",
     )
     chart_export_buttons(
         df=disp.rename(columns={"NUMBER": "Car", "TEAM": "Team"})[
@@ -234,7 +234,7 @@ def _show_sector_delta_heatmap(df: pd.DataFrame, key_prefix: str) -> None:
         height=260,
         margin=dict(l=80, r=60, t=56, b=48),
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
     chart_export_buttons(fig=fig, filename=f"{key_prefix}_sector_delta_heatmap", height=260)
 
 
@@ -279,5 +279,5 @@ def _show_sector_evolution(df: pd.DataFrame, team_colors: dict, key_prefix: str)
         yaxis=dict(title=f"{sector_label} (s)"),
         height=420,
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
     chart_export_buttons(fig=fig, filename=f"{key_prefix}_sector_evolution", height=420)

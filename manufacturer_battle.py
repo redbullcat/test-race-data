@@ -107,7 +107,7 @@ def _show_laps_by_manufacturer(df: pd.DataFrame, cmap: dict, key_prefix: str) ->
         showlegend=False,
         height=max(260, len(laps) * 52),
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
     chart_export_buttons(fig=fig, filename=f"{key_prefix}_mfr_laps")
 
     st.dataframe(
@@ -118,7 +118,7 @@ def _show_laps_by_manufacturer(df: pd.DataFrame, cmap: dict, key_prefix: str) ->
             "Avg_Per_Car": "Avg Laps / Car",
         }).sort_values("Total Laps", ascending=False).reset_index(drop=True),
         hide_index=True,
-        use_container_width=True,
+        width="stretch",
     )
     chart_export_buttons(df=laps, filename=f"{key_prefix}_mfr_laps_table")
 
@@ -173,7 +173,7 @@ def _show_manufacturer_pace(df: pd.DataFrame, cmap: dict, key_prefix: str) -> No
                    range=[y_min - step * 0.5, y_max + step * 0.5]),
         height=460,
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
     chart_export_buttons(fig=fig, filename=f"{key_prefix}_mfr_pace")
 
 
@@ -224,7 +224,7 @@ def _show_manufacturer_speed(df: pd.DataFrame, cmap: dict, key_prefix: str) -> N
         showlegend=False,
         height=380,
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
     chart_export_buttons(fig=fig, filename=f"{key_prefix}_mfr_speed")
 
     st.dataframe(
@@ -235,6 +235,6 @@ def _show_manufacturer_speed(df: pd.DataFrame, cmap: dict, key_prefix: str) -> N
             "Count": "Laps sampled",
         }).reset_index(drop=True),
         hide_index=True,
-        use_container_width=True,
+        width="stretch",
     )
     chart_export_buttons(df=stats, filename=f"{key_prefix}_mfr_speed_table")

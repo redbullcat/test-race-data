@@ -72,7 +72,7 @@ def show_top_speed_chart(
         height=max(320, len(max_speed) * 22),
         showlegend=False,
     )
-    st.plotly_chart(fig_bar, use_container_width=True)
+    st.plotly_chart(fig_bar, width="stretch")
     chart_export_buttons(fig=fig_bar, filename=f"{key_prefix}_topspeed_bar")
 
     # Table
@@ -81,7 +81,7 @@ def show_top_speed_chart(
     st.dataframe(
         disp.rename(columns={"NUMBER": "Car", "TEAM": "Team",
                               "Max": "Max (km/h)", "Avg": "Avg (km/h)"}),
-        hide_index=True, use_container_width=True,
+        hide_index=True, width="stretch",
     )
     chart_export_buttons(df=disp, filename=f"{key_prefix}_topspeed_table")
 
@@ -133,5 +133,5 @@ def show_top_speed_chart(
         yaxis=dict(title="Speed (km/h)"),
         height=440,
     )
-    st.plotly_chart(fig_scatter, use_container_width=True)
+    st.plotly_chart(fig_scatter, width="stretch")
     chart_export_buttons(fig=fig_scatter, filename=f"{key_prefix}_topspeed_scatter")

@@ -160,7 +160,7 @@ def show_race_pace_distribution(
         height=480,
         showlegend=False,
     )
-    st.plotly_chart(fig_box, use_container_width=True)
+    st.plotly_chart(fig_box, width="stretch")
     chart_export_buttons(fig=fig_box, filename=f"{key_prefix}_pace_box", height=480)
 
     st.divider()
@@ -214,5 +214,5 @@ def show_race_pace_distribution(
         height=480,
         showlegend=False,
     )
-    st.plotly_chart(fig_strip, use_container_width=True)
+    st.plotly_chart(fig_strip, width="stretch")
     chart_export_buttons(fig=fig_strip, filename=f"{key_prefix}_pace_strip", height=480)

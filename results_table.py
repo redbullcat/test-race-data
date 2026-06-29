@@ -62,7 +62,7 @@ def _build_results(df: pd.DataFrame, selected_class: str) -> pd.DataFrame:
         .reset_index()
     )
     fastest["FASTEST_LAP"] = fastest.apply(
-        lambda r: f"{seconds_to_laptime(r['LAP_TIME_SECONDS'])} ({r['DRIVER_NAME']})", axis=1
+        lambda r: f"{seconds_to_laptime(r['LAP_TIME_SECONDS'])} ({r['DRIVER_NAME']}, lap {int(r['LAP_NUMBER'])})", axis=1
     )
 
     last_laps = last_laps.merge(

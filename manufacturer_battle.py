@@ -190,6 +190,12 @@ def _show_manufacturer_speed(df: pd.DataFrame, cmap: dict, key_prefix: str) -> N
         st.info("No top speed values found.")
         return
 
+    # 3×IQR outlier filter (same logic as top_speed_chart)
+    q1, q3 = dff["TOP_SPEED"].quantile(0.25), dff["TOP_SPEED"].quantile(0.75)
+    cap = q3 + 3.0 * (q3 - q1)
+    removed_mfr = dff[dff["TOP_SPEED"] > cap]
+    dff = dff[dff["TOP_SPEED"] <= cap]
+
     stats = (
         dff.groupby("MANUFACTURER")
         .agg(Max=("TOP_SPEED", "max"), Avg=("TOP_SPEED", "mean"), Count=("TOP_SPEED", "count"))
@@ -238,3 +244,14 @@ def _show_manufacturer_speed(df: pd.DataFrame, cmap: dict, key_prefix: str) -> N
         width="stretch",
     )
     chart_export_buttons(df=stats, filename=f"{key_prefix}_mfr_speed_table")
+
+    if not removed_mfr.empty:
+        notes = []
+        for _, r in removed_mfr.iterrows():
+            lap = int(r["LAP_NUMBER"]) if "LAP_NUMBER" in r and pd.notna(r.get("LAP_NUMBER")) else "—"
+            notes.append(
+                f"Car #{r['NUMBER']} ({r['MANUFACTURER']}), lap {lap}: "
+                f"**{r['TOP_SPEED']:.1f} km/h** removed — "
+                f"exceeds 3×IQR outlier threshold ({cap:.1f} km/h) and is likely a timing system error."
+            )
+        st.caption("\\* Outlier readings removed: " + " | ".join(notes))

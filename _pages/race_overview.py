@@ -96,7 +96,16 @@ def show_race_overview(
             top_speed_val = f"{spd.max():.1f} km/h"
             top_speed_car = f"#{df_full.loc[spd.idxmax(), 'NUMBER']}"
 
-    c1, c2, c3, c4, c5, c6 = st.columns(6)
+    # Allow metric labels and delta text to wrap rather than truncate
+    st.markdown("""
+        <style>
+        [data-testid="stMetricLabel"] p,
+        [data-testid="stMetricDelta"] > div { white-space: normal !important; }
+        </style>
+    """, unsafe_allow_html=True)
+
+    # Wider columns for cards with longer content
+    c1, c2, c3, c4, c5, c6 = st.columns([1.2, 1.8, 0.9, 0.9, 0.7, 1.5])
     c1.metric("Winner", f"#{winner_car}", winner_team)
     c2.metric("Fastest Lap", fl_time, f"#{fl_car} · {fl_driver}")
     c3.metric("Total Laps", total_laps)

@@ -123,7 +123,13 @@ def show_race_stats(df, race_start_date, series: str = "", df_full=None):
                 pass
             return None
 
-        elapsed_secs_series = overall_df["ELAPSED"].map(_elapsed_to_secs).dropna() if "ELAPSED" in overall_df.columns else pd.Series(dtype=float)
+        # overall_df doesn't carry ELAPSED — pull it from the source df
+        if "ELAPSED" in df.columns and "CAR_ID" in df.columns:
+            elapsed_lookup = df.drop_duplicates(["CAR_ID", "LAP_NUMBER"])[["CAR_ID", "LAP_NUMBER", "ELAPSED"]]
+            overall_with_elapsed = overall_df.merge(elapsed_lookup, on=["CAR_ID", "LAP_NUMBER"], how="left")
+            elapsed_secs_series = overall_with_elapsed["ELAPSED"].map(_elapsed_to_secs).dropna()
+        else:
+            elapsed_secs_series = pd.Series(dtype=float)
         race_dur_secs = elapsed_secs_series.max() if not elapsed_secs_series.empty else accounted_secs
         # Round up to the nearest hour for display (e.g. 23:58 → "24h")
         race_dur_h = round(race_dur_secs / 3600)
@@ -137,6 +143,40 @@ def show_race_stats(df, race_start_date, series: str = "", df_full=None):
             f"the remaining ~{gap_m}m {gap_s:02d}s is the leader's final incomplete lap "
             f"(still circulating when the chequered flag fell)."
         )
+
+    # --- Fastest laps ---
+    if "LAP_TIME_SECONDS" in df.columns and "LAP_NUMBER" in df.columns:
+        st.markdown("## Fastest Laps")
+
+        def _fmt_laptime(s):
+            try:
+                m = int(s // 60)
+                sec = s % 60
+                return f"{m}:{sec:06.3f}"
+            except Exception:
+                return ""
+
+        fastest_per_driver = (
+            df.dropna(subset=["LAP_TIME_SECONDS"])
+            .sort_values("LAP_TIME_SECONDS")
+            .groupby(["NUMBER", "DRIVER_NAME"], as_index=False)
+            .first()[["NUMBER", "CLASS", "DRIVER_NAME", "LAP_TIME_SECONDS", "LAP_NUMBER"]]
+        )
+        fastest_per_driver["Fastest Lap"] = fastest_per_driver["LAP_TIME_SECONDS"].apply(_fmt_laptime)
+        fastest_per_driver["Lap"] = fastest_per_driver["LAP_NUMBER"].astype(int)
+        fastest_per_driver = fastest_per_driver.sort_values("LAP_TIME_SECONDS")
+
+        classes = sorted(fastest_per_driver["CLASS"].dropna().unique())
+        tabs = st.tabs(classes)
+        for tab, cls in zip(tabs, classes):
+            with tab:
+                cdf = fastest_per_driver[fastest_per_driver["CLASS"] == cls].copy()
+                cdf.insert(0, "Rank", range(1, len(cdf) + 1))
+                _fl_display = cdf.rename(columns={
+                    "NUMBER": "Car", "DRIVER_NAME": "Driver",
+                })[["Rank", "Car", "Driver", "Fastest Lap", "Lap"]].set_index("Rank")
+                st.dataframe(_fl_display, width="stretch")
+                chart_export_buttons(df=_fl_display, filename=f"fastest_laps_{cls}")
 
     # Longest lead stint
     overall_df["change"] = overall_df["CAR_ID"] != overall_df["CAR_ID"].shift()

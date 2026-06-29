@@ -31,6 +31,27 @@ def show_top_speed_chart(
         st.info("No top speed values found.")
         return
 
+    # ── Outlier filter (per class, 3×IQR Tukey fence) ────────────────────────
+    removed: list[dict] = []
+    clean_parts = []
+    class_col = "CLASS" if "CLASS" in dff.columns else None
+    groups = dff.groupby(class_col) if class_col else [("all", dff)]
+    for cls, grp in groups:
+        q1, q3 = grp["TOP_SPEED"].quantile(0.25), grp["TOP_SPEED"].quantile(0.75)
+        cap = q3 + 3.0 * (q3 - q1)
+        outliers = grp[grp["TOP_SPEED"] > cap]
+        for _, row in outliers.iterrows():
+            removed.append({
+                "class": cls,
+                "car": row["NUMBER"],
+                "driver": row.get("DRIVER_NAME", "—"),
+                "lap": int(row["LAP_NUMBER"]) if "LAP_NUMBER" in row and pd.notna(row["LAP_NUMBER"]) else "—",
+                "speed": row["TOP_SPEED"],
+                "cap": round(cap, 1),
+            })
+        clean_parts.append(grp[grp["TOP_SPEED"] <= cap])
+    dff = pd.concat(clean_parts) if clean_parts else dff
+
     # ── Max speed by car ──────────────────────────────────────────────────────
     st.markdown("#### Maximum Speed by Car")
 
@@ -84,6 +105,17 @@ def show_top_speed_chart(
         hide_index=True, width="stretch",
     )
     chart_export_buttons(df=disp, filename=f"{key_prefix}_topspeed_table")
+
+    if removed:
+        lines = []
+        for r in removed:
+            cls_str = f" ({r['class']})" if r["class"] != "all" else ""
+            lines.append(
+                f"Car #{r['car']}{cls_str}, lap {r['lap']}: "
+                f"**{r['speed']:.1f} km/h** removed — "
+                f"exceeds 3×IQR outlier threshold ({r['cap']:.1f} km/h) and is likely a timing system error."
+            )
+        st.caption("\\* Outlier readings removed from all charts: " + " | ".join(lines))
 
     # ── Speed over lap / session distance ─────────────────────────────────────
     if "LAP_NUMBER" not in dff.columns:

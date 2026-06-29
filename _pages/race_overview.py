@@ -193,6 +193,8 @@ def show_race_overview(
             for cls in classes:
                 spd = pd.to_numeric(df_full[df_full["CLASS"] == cls]["TOP_SPEED"], errors="coerce").dropna()
                 if not spd.empty:
+                    q1, q3 = spd.quantile(0.25), spd.quantile(0.75)
+                    spd = spd[spd <= q3 + 3.0 * (q3 - q1)]
                     rows.append({"Class": cls, "Max": round(spd.max(), 1), "Avg": round(spd.mean(), 1)})
             if rows:
                 spd_df = pd.DataFrame(rows)

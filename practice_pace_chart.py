@@ -2,6 +2,7 @@ import plotly.express as px
 import pandas as pd
 import streamlit as st
 from utils import lap_to_seconds, sort_cars, chart_export_buttons, get_team_color
+from theme import apply_ota_layout
 
 def show_practice_pace_chart(df, team_colors, key_prefix="prac"):
     st.subheader("Average Practice Pace by Car")
@@ -98,10 +99,12 @@ def show_practice_pace_chart(df, team_colors, key_prefix="prac"):
     x_max = avg_df["LAP_TIME_SECONDS"].max() + 0.5 if not avg_df.empty else 1
     fig.update_xaxes(range=[x_min, x_max])
 
+    apply_ota_layout(fig)
+
     fig.update_layout(
-        plot_bgcolor="#2b2b2b",
-        paper_bgcolor="#2b2b2b",
-        font=dict(color="white", size=14),
+        
+        
+        
         xaxis_title="Average Lap Time (s)",
         yaxis_title="Car Number — Team",
         title="Average Practice Pace by Car",

@@ -112,8 +112,8 @@ def show_pace_consistency_chart(df: pd.DataFrame, team_colors: dict) -> None:
             name=row["Label"],
             text=[row["NUMBER"]],
             textposition="top center",
-            textfont=dict(color="white", size=11),
-            marker=dict(color=row["Color"], size=14, line=dict(color="white", width=1)),
+            textfont=dict(color="#FFFFFF", size=11),
+            marker=dict(color=row["Color"], size=14, line=dict(color="#2A2A2A", width=1)),
             customdata=[[row["Label"], row["Laps"], seconds_to_laptime(row["Avg Pace (s)"])]],
             hovertemplate=(
                 "<b>%{customdata[0]}</b><br>"

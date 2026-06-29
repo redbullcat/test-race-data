@@ -1,6 +1,7 @@
 import pandas as pd
 import streamlit as st
 from utils import lap_to_seconds, sort_cars, chart_export_buttons
+from theme import apply_ota_layout
 import plotly.express as px
 
 def show_practice_average_long_run_pace(df, team_colors, key_prefix="prac"):
@@ -157,10 +158,12 @@ def show_practice_average_long_run_pace(df, team_colors, key_prefix="prac"):
         color_discrete_map=team_colors
     )
 
+    apply_ota_layout(fig)
+
     fig.update_layout(
-        plot_bgcolor="#2b2b2b",
-        paper_bgcolor="#2b2b2b",
-        font=dict(color="white"),
+        
+        
+        
         legend_title_text="Car - Team"
     )
 

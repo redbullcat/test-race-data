@@ -2,6 +2,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 from utils import sort_cars, chart_export_buttons
+from theme import apply_ota_layout
 
 
 def parse_hour_time(series: pd.Series) -> pd.Series:
@@ -195,10 +196,12 @@ def show_practice_team_run_analysis(df, team_colors, key_prefix="prac"):
             title="Laps in Run"
         )
 
+        apply_ota_layout(fig)
+
         fig.update_layout(
-            plot_bgcolor="#2b2b2b",
-            paper_bgcolor="#2b2b2b",
-            font=dict(color="white", size=14),
+            
+            
+            
             showlegend=False,
         )
 

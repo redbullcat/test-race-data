@@ -229,21 +229,10 @@ def validate_dataframe(df: pd.DataFrame, required_cols: list[str], context: str 
 # Plotly dark layout defaults
 # ---------------------------------------------------------------------------
 
-DARK_LAYOUT = dict(
-    plot_bgcolor="#2b2b2b",
-    paper_bgcolor="#2b2b2b",
-    font=dict(color="white", size=14),
-    xaxis=dict(color="white", gridcolor="#444"),
-    yaxis=dict(color="white", gridcolor="#444"),
-    legend=dict(bgcolor="rgba(0,0,0,0)"),
-)
-
-
 def apply_dark_layout(fig, **overrides):
-    """Apply standard dark theme to a Plotly figure, with optional overrides."""
-    layout = {**DARK_LAYOUT, **overrides}
-    fig.update_layout(**layout)
-    return fig
+    """Apply the On The Apex Plotly theme to a figure. Delegates to theme.apply_ota_layout."""
+    from theme import apply_ota_layout
+    return apply_ota_layout(fig, **overrides)
 
 
 # ---------------------------------------------------------------------------

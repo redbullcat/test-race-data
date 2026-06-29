@@ -68,9 +68,13 @@ def show_race_stats(df, race_start_date, series: str = "", df_full=None):
     total_laps = overall_df["LAP_NUMBER"].nunique()
 
     col1, col2, col3 = st.columns(3)
-    col1.metric("Overall lead changes", lead_changes)
+    col1.metric("Lead changes (overall race)", lead_changes)
     col2.metric("Cars that led overall", cars_led)
     col3.metric("Total race laps", total_laps)
+    st.caption(
+        "Lead changes (overall race) counts how many times the single race-wide leader changed "
+        "across all classes combined. Per-class counts below are independent — they will not add up to this figure."
+    )
 
     # Lead changes by class
     st.markdown("**Lead changes by class**")
@@ -83,18 +87,12 @@ def show_race_stats(df, race_start_date, series: str = "", df_full=None):
         st.markdown("**Laps by flag condition**")
         flag_counts = overall_df["FLAG_AT_FL"].fillna("GREEN").replace("GF", "GREEN").value_counts()
         total_laps_flag = flag_counts.sum()
-        # Approximate time per flag: use mean lap time across all laps in that condition
-        mean_lap = overall_df.copy()
-        mean_lap["FLAG_AT_FL"] = mean_lap["FLAG_AT_FL"].fillna("GREEN").replace("GF", "GREEN")
-        if "LAP_TIME" in mean_lap.columns:
-            def _parse_laptime(s):
-                try:
-                    parts = str(s).split(":")
-                    return int(parts[0]) * 60 + float(parts[1]) if len(parts) == 2 else float(parts[0])
-                except Exception:
-                    return None
-            mean_lap["_lt_secs"] = mean_lap["LAP_TIME"].apply(_parse_laptime)
-            flag_mean_secs = mean_lap.groupby("FLAG_AT_FL")["_lt_secs"].mean()
+        # Join lap times from source df — overall_df only carries leader identity, not lap times
+        if "LAP_TIME_SECONDS" in df.columns and "CAR_ID" in df.columns:
+            lt_lookup = df.drop_duplicates(["CAR_ID", "LAP_NUMBER"])[["CAR_ID", "LAP_NUMBER", "LAP_TIME_SECONDS", "FLAG_AT_FL"]]
+            overall_with_lt = overall_df.merge(lt_lookup, on=["CAR_ID", "LAP_NUMBER"], how="left", suffixes=("", "_src"))
+            overall_with_lt["_flag"] = overall_with_lt["FLAG_AT_FL"].fillna("GREEN").replace("GF", "GREEN")
+            flag_mean_secs = overall_with_lt.groupby("_flag")["LAP_TIME_SECONDS"].mean()
         else:
             flag_mean_secs = {}
         accounted_secs = 0.0

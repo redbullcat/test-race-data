@@ -142,40 +142,6 @@ def show_race_stats(df, race_start_date, series: str = "", df_full=None):
             f"(still circulating when the chequered flag fell)."
         )
 
-    # --- Fastest laps ---
-    if "LAP_TIME_SECONDS" in df.columns and "LAP_NUMBER" in df.columns:
-        st.markdown("## Fastest Laps")
-
-        def _fmt_laptime(s):
-            try:
-                m = int(s // 60)
-                sec = s % 60
-                return f"{m}:{sec:06.3f}"
-            except Exception:
-                return ""
-
-        fastest_per_driver = (
-            df.dropna(subset=["LAP_TIME_SECONDS"])
-            .sort_values("LAP_TIME_SECONDS")
-            .groupby(["NUMBER", "DRIVER_NAME"], as_index=False)
-            .first()[["NUMBER", "CLASS", "DRIVER_NAME", "LAP_TIME_SECONDS", "LAP_NUMBER"]]
-        )
-        fastest_per_driver["Fastest Lap"] = fastest_per_driver["LAP_TIME_SECONDS"].apply(_fmt_laptime)
-        fastest_per_driver["Lap"] = fastest_per_driver["LAP_NUMBER"].astype(int)
-        fastest_per_driver = fastest_per_driver.sort_values("LAP_TIME_SECONDS")
-
-        classes = sorted(fastest_per_driver["CLASS"].dropna().unique())
-        tabs = st.tabs(classes)
-        for tab, cls in zip(tabs, classes):
-            with tab:
-                cdf = fastest_per_driver[fastest_per_driver["CLASS"] == cls].copy()
-                cdf.insert(0, "Rank", range(1, len(cdf) + 1))
-                _fl_display = cdf.rename(columns={
-                    "NUMBER": "Car", "DRIVER_NAME": "Driver",
-                })[["Rank", "Car", "Driver", "Fastest Lap", "Lap"]].set_index("Rank")
-                st.dataframe(_fl_display, width="stretch")
-                chart_export_buttons(df=_fl_display, filename=f"fastest_laps_{cls}")
-
     # Longest lead stint
     overall_df["change"] = overall_df["CAR_ID"] != overall_df["CAR_ID"].shift()
     overall_df["stint_id"] = overall_df["change"].cumsum()
@@ -287,3 +253,40 @@ def show_race_stats(df, race_start_date, series: str = "", df_full=None):
                 hide_index=True,
             )
             chart_export_buttons(df=_driver_stats_display, filename="laps_led_by_driver")
+
+
+def show_fastest_laps(df: pd.DataFrame) -> None:
+    """Fastest lap per driver, grouped by class. Lives in the Results tab."""
+    if "LAP_TIME_SECONDS" not in df.columns or "LAP_NUMBER" not in df.columns:
+        return
+
+    st.subheader("Fastest Laps")
+
+    def _fmt(s):
+        try:
+            m = int(s // 60)
+            return f"{m}:{s % 60:06.3f}"
+        except Exception:
+            return ""
+
+    fastest = (
+        df.dropna(subset=["LAP_TIME_SECONDS"])
+        .sort_values("LAP_TIME_SECONDS")
+        .groupby(["NUMBER", "DRIVER_NAME"], as_index=False)
+        .first()[["NUMBER", "CLASS", "DRIVER_NAME", "LAP_TIME_SECONDS", "LAP_NUMBER"]]
+    )
+    fastest["Fastest Lap"] = fastest["LAP_TIME_SECONDS"].apply(_fmt)
+    fastest["Lap"] = fastest["LAP_NUMBER"].astype(int)
+    fastest = fastest.sort_values("LAP_TIME_SECONDS")
+
+    classes = sorted(fastest["CLASS"].dropna().unique())
+    tabs = st.tabs(classes)
+    for tab, cls in zip(tabs, classes):
+        with tab:
+            cdf = fastest[fastest["CLASS"] == cls].copy()
+            cdf.insert(0, "Rank", range(1, len(cdf) + 1))
+            disp = cdf.rename(columns={"NUMBER": "Car", "DRIVER_NAME": "Driver"})[
+                ["Rank", "Car", "Driver", "Fastest Lap", "Lap"]
+            ].set_index("Rank")
+            st.dataframe(disp, width="stretch")
+            chart_export_buttons(df=disp, filename=f"fastest_laps_{cls}")

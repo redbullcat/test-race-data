@@ -117,8 +117,14 @@ def _show_sector_comparison(df: pd.DataFrame, team_colors: dict, key_prefix: str
             ),
         ))
 
+    cars_str = [str(c) for c in cars_ordered]
     fig.update_layout(barmode="group")
-    apply_dark_layout(fig, title="Best Sector Times by Car", height=400)
+    apply_dark_layout(
+        fig,
+        title="Best Sector Times by Car",
+        xaxis=dict(type="category", categoryorder="array", categoryarray=cars_str),
+        height=400,
+    )
     st.plotly_chart(fig, width="stretch")
     chart_export_buttons(fig=fig, filename=f"{key_prefix}_sector_comparison", height=400)
 
@@ -167,11 +173,13 @@ def _show_theoretical_best(df: pd.DataFrame, team_colors: dict, key_prefix: str)
         hoverinfo="skip",
     ))
 
+    cars_in_order = [str(r["NUMBER"]) for _, r in best.iterrows()]
     y_min = best["Theoretical"].min() - 0.5
     y_max = best["Actual"].max() + 0.5
     apply_dark_layout(
         fig,
         title="Theoretical Best vs Actual Fastest Lap  (white bar = actual)",
+        xaxis=dict(type="category", categoryorder="array", categoryarray=cars_in_order),
         yaxis=dict(range=[y_min, y_max]),
         height=420,
     )

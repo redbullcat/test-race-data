@@ -100,10 +100,12 @@ def _show_laps_by_manufacturer(df: pd.DataFrame, cmap: dict, key_prefix: str) ->
             ),
         ))
 
+    mfr_y_order = laps["MANUFACTURER"].tolist()
     apply_dark_layout(
         fig,
         title="Total Laps Completed by Manufacturer",
         xaxis=dict(title="Laps"),
+        yaxis=dict(type="category", categoryorder="array", categoryarray=mfr_y_order),
         showlegend=False,
         height=max(260, len(laps) * 52),
     )

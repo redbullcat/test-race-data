@@ -2,6 +2,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 from utils import lap_to_seconds, sort_cars, chart_export_buttons, get_team_color
+from theme import apply_ota_layout
 
 def show_practice_fastest_runs(df, team_colors, key_prefix="prac"):
     st.subheader("Fastest Run Average Pace by Car")
@@ -164,10 +165,12 @@ def show_practice_fastest_runs(df, team_colors, key_prefix="prac"):
     x_max = fastest_runs_df["Average_Lap_Time_Seconds"].max() + 0.5 if not fastest_runs_df.empty else 1
     fig.update_xaxes(range=[x_min, x_max])
 
+    apply_ota_layout(fig)
+
     fig.update_layout(
-        plot_bgcolor="#2b2b2b",
-        paper_bgcolor="#2b2b2b",
-        font=dict(color="white", size=14),
+        
+        
+        
         xaxis_title="Average Lap Time (s)",
         yaxis_title="Car Number — Team",
         title_font=dict(size=22),

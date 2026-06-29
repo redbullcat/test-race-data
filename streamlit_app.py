@@ -6,6 +6,7 @@ import os
 import streamlit as st
 
 from config import DATA_DIR, TEAM_COLORS, SERIES_DISPLAY, CLASS_PRIORITY
+from theme import inject_theme, inject_sidebar_logo
 from data_loader import load_file_index, load_race, parse_race_start_date
 from manifest import load_manifest, manifest_to_file_index, get_event_meta
 from live_db import live_db_available, load_live_race, get_session_meta, get_live_stats, DEFAULT_DB
@@ -16,6 +17,8 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+inject_theme()
 
 # ---------------------------------------------------------------------------
 # File index — use manifest if available (fast), else walk filesystem
@@ -65,7 +68,7 @@ def _get_param(key: str, default: str) -> str:
 # Sidebar
 # ---------------------------------------------------------------------------
 with st.sidebar:
-    st.title("On The Apex")
+    inject_sidebar_logo()
 
     # ── Live mode ────────────────────────────────────────────────────────────
     _live_available = live_db_available(DEFAULT_DB)

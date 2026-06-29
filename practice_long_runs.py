@@ -2,6 +2,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 from utils import chart_export_buttons, get_team_color
+from theme import apply_ota_layout
 
 def show_practice_long_runs(longest_stints_df, team_colors, key_prefix="prac"):
     st.subheader("Longest Run Pace by Car (Lap-by-Lap)")
@@ -70,10 +71,12 @@ def show_practice_long_runs(longest_stints_df, team_colors, key_prefix="prac"):
 
     fig.update_yaxes(autorange="reversed")
 
+    apply_ota_layout(fig)
+
     fig.update_layout(
-        plot_bgcolor="#2b2b2b",
-        paper_bgcolor="#2b2b2b",
-        font=dict(color="white", size=14),
+        
+        
+        
         legend_title_text="Car — Team",
         title_font=dict(size=20),
     )

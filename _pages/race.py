@@ -100,6 +100,7 @@ def show_race(
         from gap_evolution_chart import get_filtered_race_data, show_gap_evolution_chart, show_cumulative_time_chart
         from story_chart import show_story
         from manufacturer_battle import show_manufacturer_battle
+        from lead_history_chart import show_lead_history_chart
 
         if race_start_date:
             show_race_stats(df, race_start_date, series=selected_series, df_full=df_full)
@@ -122,6 +123,9 @@ def show_race(
                     show_cumulative_time_chart(filtered_df, team_colors, selected_class, selected_cars)
             else:
                 st.info("Click 'Generate gap evolution' to load the chart.")
+
+        st.divider()
+        show_lead_history_chart(df, team_colors, race_start_date=race_start_date, df_full=df_full)
 
         st.divider()
         show_story(df, team_colors, race_start_date)

@@ -98,19 +98,39 @@ def _build_hourly_matrix(df: pd.DataFrame) -> tuple[pd.DataFrame, list[int]]:
 # Chart
 # ---------------------------------------------------------------------------
 
-def show_hourly_position_chart(df: pd.DataFrame, team_colors: dict) -> None:
-    """Render the hourly position chart for each class."""
+def show_hourly_position_chart(df: pd.DataFrame, team_colors: dict, df_full: pd.DataFrame | None = None) -> None:
+    """Render the hourly position chart.
+
+    df      — default DataFrame (may be class-filtered).
+    df_full — all classes; used when scope == 'Overall'.
+    """
     st.subheader("Position by Race Hour")
 
     if "ELAPSED_SECONDS" not in df.columns:
         st.info("Elapsed time data not available — hourly position chart requires ELAPSED_SECONDS.")
         return
 
-    classes = sorted(df["CLASS"].dropna().unique())
-    selected_class = st.selectbox("Class", classes, key="hourly_pos_class")
-    class_df = df[df["CLASS"] == selected_class].copy()
+    if df_full is None:
+        df_full = df
 
-    all_cars = sort_cars(class_df["NUMBER"].dropna().unique())
+    scope = st.radio(
+        "Position scope",
+        ["Within class", "Overall"],
+        horizontal=True,
+        key="hourly_pos_scope",
+        help="'Overall' ranks every car together regardless of class — useful for single-class series like GTWC.",
+    )
+
+    if scope == "Overall":
+        rank_df = df_full.copy()
+        title_suffix = "Overall"
+    else:
+        classes = sorted(df["CLASS"].dropna().unique())
+        selected_class = st.selectbox("Class", classes, key="hourly_pos_class")
+        rank_df = df[df["CLASS"] == selected_class].copy()
+        title_suffix = selected_class
+
+    all_cars = sort_cars(rank_df["NUMBER"].dropna().unique())
     selected_cars = st.multiselect(
         "Cars to display",
         all_cars,
@@ -120,15 +140,17 @@ def show_hourly_position_chart(df: pd.DataFrame, team_colors: dict) -> None:
     if not selected_cars:
         return
 
-    matrix, hours = _build_hourly_matrix(class_df)
+    matrix, hours = _build_hourly_matrix(rank_df)
     if matrix.empty or not hours:
         st.info("Not enough data to build hourly positions.")
         return
 
     # Car → team colour
     car_color: dict[str, str] = {}
-    for _, row in class_df[["NUMBER", "TEAM"]].drop_duplicates().iterrows():
+    for _, row in rank_df[["NUMBER", "TEAM"]].drop_duplicates().iterrows():
         car_color[str(row["NUMBER"])] = get_team_color(row["TEAM"], team_colors)
+
+    class_df = rank_df  # used below for hover lap lookups
 
     # How many cars share a colour (for dash differentiation)
     from collections import defaultdict
@@ -181,10 +203,10 @@ def show_hourly_position_chart(df: pd.DataFrame, team_colors: dict) -> None:
             connectgaps=False,
         ))
 
-    n_cars = class_df["NUMBER"].nunique()
+    n_cars = rank_df["NUMBER"].nunique()
     apply_dark_layout(
         fig,
-        title=f"Position at Each Race Hour — {selected_class}",
+        title=f"Position at Each Race Hour — {title_suffix}",
         xaxis=dict(
             title="Race elapsed (hours)",
             tickmode="array",
@@ -203,7 +225,7 @@ def show_hourly_position_chart(df: pd.DataFrame, team_colors: dict) -> None:
     st.plotly_chart(fig, width="stretch")
     chart_export_buttons(
         fig=fig,
-        filename=f"hourly_position_{selected_class.lower().replace(' ', '_')}",
+        filename=f"hourly_position_{title_suffix.lower().replace(' ', '_')}",
         height=max(400, n_cars * 28),
     )
 

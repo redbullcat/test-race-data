@@ -10,7 +10,22 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from utils import get_team_color, apply_dark_layout, sort_cars, chart_export_buttons, trace_border
+from utils import get_team_color, apply_dark_layout, sort_cars, chart_export_buttons
+
+try:
+    from utils import trace_border
+except ImportError:
+    def trace_border(color: str, threshold: float = 0.06) -> dict:  # type: ignore[misc]
+        h = color.lstrip("#")
+        if len(h) == 3:
+            h = "".join(c * 2 for c in h)
+        try:
+            r, g, b = int(h[0:2], 16) / 255, int(h[2:4], 16) / 255, int(h[4:6], 16) / 255
+            if 0.2126 * r + 0.7152 * g + 0.0722 * b < threshold:
+                return {"line": dict(color="white", width=1.5)}
+        except Exception:
+            pass
+        return {}
 
 
 # ---------------------------------------------------------------------------

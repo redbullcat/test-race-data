@@ -38,6 +38,7 @@ def show_race(
         from race_stats import show_fastest_laps
         from top_speed_chart import show_top_speed_chart
         from lap_position_chart import show_lap_position_chart
+        from hourly_position_chart import show_hourly_position_chart
 
         show_results_table(df, team_colors)
         st.divider()
@@ -45,7 +46,9 @@ def show_race(
         st.divider()
         show_top_speed_chart(df, team_colors, key_prefix="res_ts", session_label="Race")
         st.divider()
-        show_lap_position_chart(df, team_colors)
+        show_lap_position_chart(df, team_colors, df_full=df_full)
+        st.divider()
+        show_hourly_position_chart(df_full, team_colors, df_full=df_full)
 
     # ── Pace ────────────────────────────────────────────────────────────────────
     with pace_tab:

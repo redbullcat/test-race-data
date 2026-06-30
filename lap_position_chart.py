@@ -177,7 +177,71 @@ def _laps_for_hour(
 # Main entry point
 # ---------------------------------------------------------------------------
 
-def show_lap_position_chart(df, team_colors):
+def show_lap_position_chart(df, team_colors, df_full: pd.DataFrame | None = None):
+    """Lap-by-lap position chart.
+
+    df       — the (possibly class-filtered) DataFrame used for display defaults.
+    df_full  — all classes; used when scope == "Overall".  Falls back to df if not supplied.
+    """
+    if df_full is None:
+        df_full = df
+
+    st.subheader("Lap-by-Lap Position Chart")
+
+    scope = st.radio(
+        "Position scope",
+        ["Within class", "Overall"],
+        horizontal=True,
+        key="pos_scope",
+        help="'Overall' ranks every car together regardless of class — useful for single-class series like GTWC.",
+    )
+
+    # ── Overall mode ─────────────────────────────────────────────────────────
+    if scope == "Overall":
+        rank_df = df_full.copy()  # position computed across ALL cars
+        all_cars = sort_cars(rank_df["NUMBER"].dropna().unique())
+        selected_cars = st.multiselect(
+            "Cars to display (position ranked overall):",
+            all_cars,
+            default=all_cars[:20] if len(all_cars) > 20 else all_cars,
+            key="pos_cars_overall",
+        )
+        if not selected_cars:
+            st.info("No cars selected.")
+            return
+
+        max_lap = rank_df["LAP_NUMBER"].max()
+        if pd.isna(max_lap) or max_lap < 1:
+            st.info("No lap data available.")
+            return
+
+        lap_range = st.slider(
+            "Lap range:", 1, int(max_lap), (1, int(max_lap)),
+            key="pos_laps_overall",
+        )
+        start_lap, end_lap = lap_range
+        laps_in_range = range(start_lap, end_lap + 1)
+
+        car_colors: dict[str, str] = {}
+        for _, row in rank_df[["NUMBER", "TEAM"]].drop_duplicates().iterrows():
+            car_colors[row["NUMBER"]] = get_team_color(row["TEAM"], team_colors)
+        car_style = _car_styles(selected_cars, car_colors)
+
+        position_df = _build_position_matrix(rank_df, laps_in_range)
+        fig = _build_figure(
+            class_df=rank_df,
+            selected_cars=selected_cars,
+            car_colors=car_colors,
+            car_style=car_style,
+            laps_in_range=laps_in_range,
+            position_df=position_df,
+            title="Lap-by-Lap Position — Overall",
+        )
+        st.plotly_chart(fig, width="stretch")
+        chart_export_buttons(fig=fig, filename="lap_position_overall", height=500)
+        return
+
+    # ── Within-class mode (original behaviour) ───────────────────────────────
     classes = sorted(df["CLASS"].dropna().unique())
     selected_classes = st.multiselect(
         "Select class(es) for position chart:", classes, default=classes,
@@ -187,7 +251,6 @@ def show_lap_position_chart(df, team_colors):
         st.warning("No classes selected.")
         return
 
-    st.subheader("Lap-by-Lap Position Chart")
     tabs = st.tabs(selected_classes)
 
     for tab, cls in zip(tabs, selected_classes):
@@ -220,7 +283,7 @@ def show_lap_position_chart(df, team_colors):
                 car_colors[row["NUMBER"]] = get_team_color(row["TEAM"], team_colors)
             car_style = _car_styles(selected_cars, car_colors)
 
-            # ── Full-race chart (untouched) ───────────────────────────────
+            # ── Full-race chart ───────────────────────────────────────────
             position_df = _build_position_matrix(class_df, laps_in_range)
             fig = _build_figure(
                 class_df=class_df,
